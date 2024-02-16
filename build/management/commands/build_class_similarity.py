@@ -4,7 +4,7 @@ from build.management.commands.base_build import Command as BaseBuild
 from django.db.models import F 
 
 
-from protein.models import Protein, ProteinFamily, Species, ProteinState, ProteinConformation
+from protein.models import Protein, ProteinConformation, ProteinAnomaly, ProteinState, ProteinSegment, ProteinFamily, Species
 # from structure.models import Structure, StructureModel, StructureComplexModel, StatsText, PdbData, StructureModelpLDDT, StructureType, StructureExtraProteins
 # import structure.assign_generic_numbers_gpcr as as_gn
 # from residue.models import Residue
@@ -16,6 +16,7 @@ from protein.models import Protein, ProteinFamily, Species, ProteinState, Protei
 
 from common.alignment import Alignment
 
+from collections import OrderedDict
 import Bio.PDB as PDB
 import os
 import logging
@@ -68,11 +69,87 @@ class Command(BaseBuild):
         
         parent_families = self.get_parent_gpcr_families()
         human_parent_gpcr_families = self.filter_out_non_human_parent_gpcr_families(parent_families)
-        for gpcr_class in human_parent_gpcr_families:
-             print(gpcr_class)
+        gpcr_segments = ProteinSegment.objects.filter(proteinfamily='GPCR')
+        cross_class_similarities = OrderedDict()
+        proteins = None
+        i = 1
+        for gpcr_class in human_parent_gpcr_families[:-1]:
+            del proteins
+            cross_class_similarities2 = OrderedDict()
+            # letting PostgreSQL handle the data storage via query cache, instead of storing in RAM with python.
+
+            gpcr_class_proteins = Protein.objects.all().annotate(family_slug=F('family__slug')).filter(family_slug__startswith=gpcr_class.slug)
+            # gpcr_class_proteins = gpcr_class_proteins[:10] #uncomment for test
+
+            #gpcr_class_proteins = list(gpcr_class_proteins)
+            for gpcr_class2 in human_parent_gpcr_families[i:]:
+                gpcr_class2_proteins = Protein.objects.all().annotate(family_slug=F('family__slug')).filter(family_slug__startswith=gpcr_class2.slug)
+                # gpcr_class2_proteins = gpcr_class2_proteins[:10] #uncomment for test
+                proteins = gpcr_class_proteins | gpcr_class2_proteins
+                proteins = proteins.order_by('family_slug')
+                #proteins = gpcr_class_proteins + list(gpcr_class2_proteins)
+
+                cs_alignment = Alignment()
+                # cs_alignment.load_reference_protein(reference_protein)
+                cs_alignment.load_proteins(proteins)
+                cs_alignment.load_segments(gpcr_segments)
+                cs_alignment.build_alignment()
+                cs_alignment.remove_non_generic_numbers_from_alignment() 
+                cs_alignment.calculate_similarity_matrix()
+
+                # for key in cs_alignment.similarity_matrix.keys():
+                #    print(key,cs_alignment.similarity_matrix[key])
+
+                #print()
+
+                entry_name_2_position = {}
+                pos = 0
+                for protein in cs_alignment.proteins:
+                    entry_name_2_position[protein.protein.entry_name] = pos
+                    pos += 1
+
+
+                max_similarity = 0
+                for protein1 in gpcr_class_proteins:
+                    for protein2 in gpcr_class2_proteins:
+                        pos = entry_name_2_position[protein2.entry_name]
+                        similarity_value = int(cs_alignment.similarity_matrix[protein1.entry_name]['values'][pos][0])
+                        if  similarity_value > max_similarity:
+                            max_similarity = similarity_value
+                        #print(protein1,protein2,str(similarity_value))
+                cross_class_similarities2[gpcr_class2.name] = max_similarity
+            
+            cross_class_similarities[gpcr_class.name] = cross_class_similarities2
+            i += 1
+
+
+        # for key in  cross_class_similarities:
+
+        #     print(key,cross_class_similarities[key])
+
+        matrix = OrderedDict()
+        human_parent_gpcr_families_names = [gpcr_class.name for gpcr_class in human_parent_gpcr_families]
+        for key in human_parent_gpcr_families_names:
+            row = []
+            for key2 in human_parent_gpcr_families_names:
+                if key == key2:
+                    row.append('-')
+                    continue
+                if key in cross_class_similarities:
+                    if key2 in cross_class_similarities[key]:
+                        row.append(str(cross_class_similarities[key][key2]))
+                    else:
+                        row.append(str(cross_class_similarities[key2][key]))
+                else:
+                    row.append(str(cross_class_similarities[key2][key]))
+            matrix[key] = row
+
+        headers = matrix.keys()
+        print(', '.join(list(headers)))
+        for key in  matrix:
+
+            print(key,matrix[key])
              
-        # cs_alignment = Alignment()
-        # cs_alignment.load_reference_protein(reference_protein)
-        # cs_alignment.load_proteins([i.protein_conformation.protein for i in list(Homology_model.similarity_table.keys())])
+
 
 
