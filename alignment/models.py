@@ -8,7 +8,7 @@ class AlignmentConsensus(models.Model):
     gn_consensus = models.BinaryField(blank=True) # Store conservation calculation for each GN
 
 
-class CustomClassSimilarityManager(models.Model):
+class CustomClassSimilarityManager(models.Manager):
     def truncate_table(self):
         cursor = connection.cursor()
         table_name = self.model._meta.db_table
