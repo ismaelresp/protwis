@@ -21,4 +21,6 @@ urlpatterns = [
     url(r'^csv', views.render_csv_alignment, name='csv'),
     url(r'blastsearch$', views.BlastSearchInput.as_view(), name='blastsearch'),
     url(r'blastsearchresults', views.BlastSearchResults.as_view(), name='blastsearch_results'),
+    url(r'class_similarity_matrix/render', views.render_class_similarity_matrix, name='class_similarity_matrix'),
+    url(r'class_similarity_matrix/csv', views.render_class_similarity_csv_matrix, name='class_similarity_csv_matrix'),
 ]

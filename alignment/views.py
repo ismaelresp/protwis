@@ -24,6 +24,7 @@ from protwis.context_processors import site_title
 Alignment = getattr(__import__('common.alignment_' + settings.SITE_NAME, fromlist=['Alignment']), 'Alignment')
 from protein.models import Protein, ProteinSegment, ProteinFamily, ProteinSet
 from residue.models import ResidueNumberingScheme, ResiduePositionSet
+from alignment.models import ClassSimilarity
 from seqsign.sequence_signature import SequenceSignature, signature_score_excel
 
 from collections import OrderedDict
@@ -490,3 +491,70 @@ def render_alignment_excel(request):
     response['Content-Disposition'] = "attachment; filename=" + site_title(request)["site_title"] + "_alignment.xlsx"
 
     return response
+
+def retrieve_class_similarity_matrix():
+    cross_class_similarities = OrderedDict()
+    cross_class_most_similar_gpcr_pairs = {}
+
+
+    # matrix = OrderedDict()
+    # pos1 = -1
+    # pos2 = -1
+    # class_family1_2_pos_dict = {}
+    # class_family2_2_pos_dict = {}
+    for class_pair in ClassSimilarity.objects.all().select_related('protein_family1','protein_family2',\
+                                                                    'protein1','protein2')\
+                                                                    .values('protein_family1__slug','protein_family1__name',\
+                                                                   'protein_family2__slug','protein_family2__name',\
+                                                                    'protein1__entry_name','protein2__entry_name','similarity')\
+                                                                    .order_by('protein_family1__slug','protein_family2__slug'):
+        if class_pair['protein_family1__name'] not in cross_class_similarities:
+            cross_class_similarities[class_pair['protein_family1__name']] = OrderedDict()
+            cross_class_most_similar_gpcr_pairs[class_pair['protein_family1__name']] = {}
+        cross_class_similarities[class_pair['protein_family1__name']][class_pair['protein_family2__name']] = class_pair['similarity']
+        cross_class_most_similar_gpcr_pairs[class_pair['protein_family1__name']][class_pair['protein_family2__name']] = (class_pair['protein1__entry_name'],class_pair['protein2__entry_name'])
+
+    selected_parent_gpcr_families_names1 = OrderedDict()
+    selected_parent_gpcr_families_names2 = OrderedDict()
+    for key in cross_class_similarities:
+        selected_parent_gpcr_families_names1[key] = None
+        for key2 in cross_class_similarities[key]:
+            selected_parent_gpcr_families_names2[key2] = None
+    for key in selected_parent_gpcr_families_names2:
+        selected_parent_gpcr_families_names1[key] = None
+
+    selected_parent_gpcr_families_names = selected_parent_gpcr_families_names1.keys()
+
+    print(selected_parent_gpcr_families_names)
+    
+    cross_class_similarity_matrix = OrderedDict()
+    for key in selected_parent_gpcr_families_names:
+        row = []
+        for key2 in selected_parent_gpcr_families_names:
+            if key == key2:
+                row.append(['-','-',''])
+                continue
+            if key in cross_class_similarities:
+                if key2 in cross_class_similarities[key]:
+                    row.append([str(cross_class_similarities[key][key2]),str(cross_class_similarities[key][key2]//10),cross_class_most_similar_gpcr_pairs[key][key2]])
+                else:
+                    row.append([str(cross_class_similarities[key2][key]),str(cross_class_similarities[key2][key]//10),cross_class_most_similar_gpcr_pairs[key2][key]])
+            else:
+                row.append([str(cross_class_similarities[key2][key]),str(cross_class_similarities[key2][key]//10),cross_class_most_similar_gpcr_pairs[key2][key]])
+        cross_class_similarity_matrix[key] = {'name':key,'values':row}
+
+    return (cross_class_similarity_matrix,selected_parent_gpcr_families_names)
+
+def render_class_similarity_matrix(request):
+    
+
+    return render(request, 'class_similarity/matrix.html', {'p': retrieve_class_similarity_matrix()[1],'m': retrieve_class_similarity_matrix()[0]})
+
+def render_class_similarity_csv_matrix(request):
+
+    
+    response = render(request, 'class_similarity/matrix_csv.html', {'p': retrieve_class_similarity_matrix()[1],'m': retrieve_class_similarity_matrix()[0]})
+    response['Content-Disposition'] = "attachment; filename=" + site_title(request)["site_title"] + "_similaritymatrix.csv"
+    print('hello')
+    return response
+

@@ -1,0 +1,66 @@
+{% extends "home/base.html" %}
+{% load static %}
+
+{% block addon_css %}
+{% endblock %}
+
+{% block addon_js %}
+    <script src="{% static 'home/js/grayscale.js' %}"> </script>
+    <script>
+      $(function () {
+        $("[data-toggle='popover']").popover();
+        gray_scale_table($("#alignment_class_similarity_matrix_table"),["color-set1"],1);
+      });
+
+      
+    </script>
+
+{% endblock %}
+
+{% block content %}
+{% block buttons %}
+<!-- Download button -->
+<div class="btn-group">
+  <button type="button" class="btn btn-sm btn-primary dropdown-toggle" data-toggle="dropdown" aria-haspopup="true"
+    aria-expanded="false">
+    <span class="glyphicon glyphicon-download"></span> Download <span class="caret"></span>
+  </button>
+  <ul class="dropdown-menu">
+    <li><a href="/alignment/class_similarity_matrix/csv">Spreadsheet (csv)</a></li>
+</div>
+{% endblock %}
+<p class="text-right">
+</p>
+<!-- matrix starts -->
+<div class="table-responsive">
+    <table id="alignment_class_similarity_matrix_table" class="table table-bordered table-condensed">
+        <tr>
+            <th></th>
+            {% for p in m %}
+            {% with i=forloop.counter %}
+            <th class="info text-center">{{ i }}</th>
+            {% endwith %}
+            {% endfor %}
+        </tr>
+        {% for p, v in m.items %}
+        <tr>
+          {% with i=forloop.counter %}
+            <th class="info">{{ i }}. {{ v.name|safe }}</th>
+            {% for col in v.values %}
+              {% with j=forloop.counter %}
+              <td class="text-center{% if col.1 != '-' %}{% endif %} color-set1">
+                {% if col.1 != '-' %}<div data-html="true" data-toggle="popover" data-trigger="click hover" data-placement="below" data-html="true"
+                 data-content="{% if i > j %}{{ col.2.1 }} vs {{ col.2.0 }}{% else %}{{ col.2.0 }} vs {{ col.2.1 }}{% endif %}">
+                 {{ col.0 }}
+                </div>{% else %}{{ col.0 }}{% endif %}
+              </td>
+              {% endwith %}
+            {% endfor %}
+          {% endwith %}
+            
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+<!-- matrix alignment ends -->
+{% endblock %}
