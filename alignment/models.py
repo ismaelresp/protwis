@@ -16,13 +16,18 @@ class CustomClassSimilarityManager(models.Manager):
         cursor.execute(sql)
 
 class ClassSimilarity(models.Model):
-    protein_family1 = models.ForeignKey('protein.ProteinFamily', on_delete=models.CASCADE, related_name='class_similarity_protein_family1')
-    protein_family2 = models.ForeignKey('protein.ProteinFamily', on_delete=models.CASCADE, related_name='class_similarity_protein_family2')
-    protein1 = models.ForeignKey('protein.Protein', on_delete=models.CASCADE, related_name='class_similarity_protein1')
-    protein2 = models.ForeignKey('protein.Protein', on_delete=models.CASCADE, related_name='class_similarity_protein2')
+    protein_family1 = models.ForeignKey('protein.ProteinFamily',null=False, on_delete=models.CASCADE, related_name='class_similarity_protein_family1')
+    protein_family2 = models.ForeignKey('protein.ProteinFamily',null=False, on_delete=models.CASCADE, related_name='class_similarity_protein_family2')
+    protein1 = models.ForeignKey('protein.Protein',null=False, on_delete=models.CASCADE, related_name='class_similarity_protein1')
+    protein2 = models.ForeignKey('protein.Protein',null=False, on_delete=models.CASCADE, related_name='class_similarity_protein2')
     similarity = models.IntegerField(null=False)
 
     objects = models.Manager()  # The default manager.
     custom_objects = CustomClassSimilarityManager()  # The custom manager.
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['protein_family1', 'protein_family2'], name='unique_class_similarity_protein_family'),
+            models.UniqueConstraint(fields=['protein1', 'protein2'], name='unique_class_similarity_protein'),
+        ]
     def __str__(self):
         return str(self.protein_family1)+" - "+str(self.protein_family2)+": "+str(self.similarity)
