@@ -256,8 +256,9 @@ function colorGradient(fraction, reverse, color1, color2, color3) {
  *
  *  @table: The table object
  *  @colorSetIds: An array of color-set[int] class name strings
+ *  @firstRowIndex: Integer table row index starting from zero for the first row of the table where the first occurrence of a cell with class "color-set[int]" is found
  */
-function gray_scale_table(table, colorSetIds = []) {
+function gray_scale_table(table, colorSetIds = [], firstRowIndex = 0) {
   // Collect values for columns and sets
   var cols = [];
   var sets = {};
@@ -283,8 +284,8 @@ function gray_scale_table(table, colorSetIds = []) {
             if (cell.innerText !== "-" && cell.innerText !== "Full Bias") {
               sets[String(colorSetIds[k])].push(cell.innerText);
             }
-            if (i === 0) {
-              colIdColorSet[parseInt(j,10)] = colorSetIds[k];
+            if (i === firstRowIndex) {
+              colIdColorSet[parseInt(j,10)] = colorSetIds[k]; // Why should this be done only on the first row, and not just once per column (j increase) with a flag variable?
             }
             colored = true;
             break;
