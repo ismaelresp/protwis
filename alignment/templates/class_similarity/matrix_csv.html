@@ -1,3 +1,6 @@
 ,{% for p in m %}{{ forloop.counter }}{% if forloop.counter != m|length %},{% endif %}{% endfor %}
-{% for p, v in m.items %}{% with i=forloop.counter %}{{ i }}. {{ v.name|safe }},{% for col in v.values %}{% with j=forloop.counter %}{% if i >= j %}{{ col.0 }} {{ col.2.1 }} {{ col.2.0 }}{% else %}{{ col.2.0 }} {{ col.2.1 }}{% endif %}{% if j != v.values|length %},{% endif %}{% endwith %}{% endfor %}
+{% for p, v in m.items %}{% with i=forloop.counter %}{{ i }}. {{ v.name|safe }},{% for col in v.values %}{% with j=forloop.counter %}{{ col.0 }}{% if j != v.values|length %},{% endif %}{% endwith %}{% endfor %}
+{% endwith %}{% endfor %}
+,{% for p in m %}{{ forloop.counter }}{% if forloop.counter != m|length %},{% endif %}{% endfor %}
+{% for p, v in m.items %}{% with i=forloop.counter %}{{ i }}. {{ v.name|safe }},{% for col in v.values %}{% with j=forloop.counter %}{% if i > j %}{{ col.2.1 }} vs {{ col.2.0 }}{% elif i < j %}{{ col.2.0 }} vs {{ col.2.1 }}{% else %}-{% endif %}{% if j != v.values|length %},{% endif %}{% endwith %}{% endfor %}
 {% endwith %}{% endfor %}

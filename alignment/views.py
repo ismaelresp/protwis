@@ -5,6 +5,7 @@ from django.views.generic import TemplateView
 from django.db.models import Case, When
 from django.core.cache import cache
 from django.core.cache import caches
+from django.utils.html import escape
 
 try:
     cache_alignment = caches['alignments']
@@ -24,7 +25,7 @@ from protwis.context_processors import site_title
 Alignment = getattr(__import__('common.alignment_' + settings.SITE_NAME, fromlist=['Alignment']), 'Alignment')
 from protein.models import Protein, ProteinSegment, ProteinFamily, ProteinSet
 from residue.models import ResidueNumberingScheme, ResiduePositionSet
-from alignment.models import ClassSimilarity
+from alignment.models import ClassSimilarity, ClassSimilarityTie, ClassSimilarityType, ClassRepresentativeSpecies
 from seqsign.sequence_signature import SequenceSignature, signature_score_excel
 
 from collections import OrderedDict
@@ -38,7 +39,9 @@ import numpy as np
 import os
 import xlsxwriter
 import xlrd
+import re
 
+strain_re = re.compile(r'\bstrain\b', flags=re.I)
 
 # class TargetSelection(AbsTargetSelection):
 #     step = 1
@@ -492,27 +495,65 @@ def render_alignment_excel(request):
 
     return response
 
-def retrieve_class_similarity_matrix():
+def retrieve_class_similarity_matrix(output_type='html'):
     cross_class_similarities = OrderedDict()
-    cross_class_most_similar_gpcr_pairs = {}
 
 
-    # matrix = OrderedDict()
-    # pos1 = -1
-    # pos2 = -1
-    # class_family1_2_pos_dict = {}
-    # class_family2_2_pos_dict = {}
+    class_representative_species_list = ClassRepresentativeSpecies.objects.all().prefetch_related()
+    if output_type == 'html':
+        gpcr_family_name_2_class_representative_species = {}
+        for class_representative_species in class_representative_species_list:
+            gpcr_family_name = class_representative_species.protein_family.name
+            species_name = class_representative_species.species.common_name
+            if species_name.lower() != 'human':
+                if strain_re.search(species_name):
+                    species_name = '<i>'+escape(class_representative_species.species.latin_name)+'</i> '+escape(species_name)
+                    gpcr_family_name_2_class_representative_species[gpcr_family_name] = species_name
+                else:
+                    species_name = class_representative_species.species.latin_name
+                    gpcr_family_name_2_class_representative_species[gpcr_family_name] = '<i>'+escape(species_name)+'</i>'
+            else:
+                gpcr_family_name_2_class_representative_species[gpcr_family_name] = escape(species_name)
+
+    ties_list = ClassSimilarityTie.objects.all().select_related('protein1','protein2').values('class_similarity_id',
+                                                                    'protein1__entry_name','protein2__entry_name',
+                                                                    'protein1__name','protein2__name','type')
+
+    class_similarity_id_2_ties = {}
+    for tie in ties_list:
+        class_similarity_id = tie['class_similarity_id']
+        if class_similarity_id not in class_similarity_id_2_ties:
+            class_similarity_id_2_ties[class_similarity_id] = []
+        class_similarity_id_2_ties[class_similarity_id].append(tie)
+
     for class_pair in ClassSimilarity.objects.all().select_related('protein_family1','protein_family2',\
                                                                     'protein1','protein2')\
-                                                                    .values('protein_family1__slug','protein_family1__name',\
-                                                                   'protein_family2__slug','protein_family2__name',\
-                                                                    'protein1__entry_name','protein2__entry_name','similarity')\
+                                                                    .values('id','protein_family1__slug','protein_family1__name',
+                                                                   'protein_family2__slug','protein_family2__name',
+                                                                    'similar_protein1__entry_name','similar_protein2__entry_name',
+                                                                    'similar_protein1__name','similar_protein2__name',
+                                                                    'ident_protein1__entry_name','ident_protein2__entry_name',
+                                                                    'ident_protein1__name','ident_protein2__name','identity','similarity')\
                                                                     .order_by('protein_family1__slug','protein_family2__slug'):
         if class_pair['protein_family1__name'] not in cross_class_similarities:
             cross_class_similarities[class_pair['protein_family1__name']] = OrderedDict()
-            cross_class_most_similar_gpcr_pairs[class_pair['protein_family1__name']] = {}
-        cross_class_similarities[class_pair['protein_family1__name']][class_pair['protein_family2__name']] = class_pair['similarity']
-        cross_class_most_similar_gpcr_pairs[class_pair['protein_family1__name']][class_pair['protein_family2__name']] = (class_pair['protein1__entry_name'],class_pair['protein2__entry_name'])
+            # cross_class_most_similar_gpcr_pairs[class_pair['protein_family1__name']] = {}
+        if class_pair['protein_family2__name'] not in cross_class_similarities[class_pair['protein_family1__name']]:
+            cross_class_similarities[class_pair['protein_family1__name']][class_pair['protein_family2__name']] = {}
+        cross_class_similarities[class_pair['protein_family1__name']][class_pair['protein_family2__name']]['identity'] = class_pair['identity']
+        cross_class_similarities[class_pair['protein_family1__name']][class_pair['protein_family2__name']]['similarity'] = class_pair['similarity']
+        if output_type == 'html':
+            ident_protein1_name = Protein(name=class_pair['ident_protein1__name']).short
+            ident_protein2_name = Protein(name=class_pair['ident_protein2__name']).short
+            similar_protein1_name = Protein(name=class_pair['similar_protein1__name']).short
+            similar_protein2_name = Protein(name=class_pair['similar_protein2__name']).short
+        else:
+            ident_protein1_name = class_pair['ident_protein1__entry_name']
+            ident_protein2_name = class_pair['ident_protein2__entry_name']
+            similar_protein1_name = class_pair['similar_protein1__entry_name']
+            similar_protein2_name = class_pair['similar_protein2__entry_name']
+        cross_class_similarities[class_pair['protein_family1__name']][class_pair['protein_family2__name']]['identity_gpcr_pair'] = (ident_protein1_name,ident_protein2_name)
+        cross_class_similarities[class_pair['protein_family1__name']][class_pair['protein_family2__name']]['similarity_gpcr_pair'] = (similar_protein1_name,similar_protein2_name)
 
     selected_parent_gpcr_families_names1 = OrderedDict()
     selected_parent_gpcr_families_names2 = OrderedDict()
@@ -528,33 +569,43 @@ def retrieve_class_similarity_matrix():
     print(selected_parent_gpcr_families_names)
     
     cross_class_similarity_matrix = OrderedDict()
+    i = 0
     for key in selected_parent_gpcr_families_names:
         row = []
+        j = 0
         for key2 in selected_parent_gpcr_families_names:
             if key == key2:
                 row.append(['-','-',''])
                 continue
+            if i > j:
+                type = 'similarity'
+            else:
+                type = 'identity'
             if key in cross_class_similarities:
                 if key2 in cross_class_similarities[key]:
-                    row.append([str(cross_class_similarities[key][key2]),str(cross_class_similarities[key][key2]//10),cross_class_most_similar_gpcr_pairs[key][key2]])
+                    row.append([str(cross_class_similarities[key][key2][type]),str(cross_class_similarities[key][key2][type]//10),cross_class_similarities[key][key2][type+'_gpcr_pair']])
                 else:
-                    row.append([str(cross_class_similarities[key2][key]),str(cross_class_similarities[key2][key]//10),cross_class_most_similar_gpcr_pairs[key2][key]])
+                    row.append([str(cross_class_similarities[key2][key][type]),str(cross_class_similarities[key2][key][type]//10),cross_class_similarities[key2][key][type+'_gpcr_pair']])
             else:
-                row.append([str(cross_class_similarities[key2][key]),str(cross_class_similarities[key2][key]//10),cross_class_most_similar_gpcr_pairs[key2][key]])
-        cross_class_similarity_matrix[key] = {'name':key,'values':row}
-
+                row.append([str(cross_class_similarities[key2][key][type]),str(cross_class_similarities[key2][key][type]//10),cross_class_similarities[key2][key][type+'_gpcr_pair']])
+            j += 1
+        if output_type == 'html':
+            name = key+' ('+gpcr_family_name_2_class_representative_species[key]+')'
+        else:
+            name = key
+        cross_class_similarity_matrix[key] = {'name':name,'values':row}
+        i += 1 
     return (cross_class_similarity_matrix,selected_parent_gpcr_families_names)
 
 def render_class_similarity_matrix(request):
-    
+    r = retrieve_class_similarity_matrix()
 
-    return render(request, 'class_similarity/matrix.html', {'p': retrieve_class_similarity_matrix()[1],'m': retrieve_class_similarity_matrix()[0]})
+    return render(request, 'class_similarity/matrix.html', {'p': r[1],'m': r[0]})
 
 def render_class_similarity_csv_matrix(request):
-
+    r = retrieve_class_similarity_matrix(output_type='csv')
     
-    response = render(request, 'class_similarity/matrix_csv.html', {'p': retrieve_class_similarity_matrix()[1],'m': retrieve_class_similarity_matrix()[0]})
+    response = render(request, 'class_similarity/matrix_csv.html', {'p': r[1],'m': r[0]})
     response['Content-Disposition'] = "attachment; filename=" + site_title(request)["site_title"] + "_similaritymatrix.csv"
-    print('hello')
     return response
 

@@ -5,7 +5,7 @@ from django.db.models import F
 
 
 from protein.models import Protein, ProteinConformation, ProteinAnomaly, ProteinState, ProteinSegment, ProteinFamily, Species
-from alignment.models import ClassSimilarity
+from alignment.models import ClassSimilarity, ClassSimilarityTie, ClassSimilarityType, ClassRepresentativeSpecies
 # from structure.models import Structure, StructureModel, StructureComplexModel, StatsText, PdbData, StructureModelpLDDT, StructureType, StructureExtraProteins
 # import structure.assign_generic_numbers_gpcr as as_gn
 # from residue.models import Residue
@@ -48,13 +48,14 @@ import warnings
 warnings.filterwarnings("ignore")
 
 class Command(BaseBuild):
-    help = 'Build cross-class similarity matrices and stores them into GPCRdb database purging first the existing similirity entries.'
+    help = 'Build cross-class similarity and identity matrices and stores them into GPCRdb database purging first the existing similarity and identity entries. Also stores the most similar and the highest identity GPCR pairs.'
     
 
     def add_arguments(self, parser):
         super(Command, self).add_arguments(parser=parser)
         parser.add_argument('--verbose', help='Prints progress in stdout.', default=False, action='store_true')
         parser.add_argument('--print_results', help='Prints results in stdout.', default=False, action='store_true')
+        parser.add_argument('--limit',type=int, help='For testing purposes. Use only any indicated number of GPCRs per class and per batch. Default 10.', default=False, action='store')
        
     def get_parent_gpcr_families(self):
         parent_family = ProteinFamily.objects.get(slug='000') 
@@ -99,13 +100,25 @@ class Command(BaseBuild):
         parent_families = self.get_parent_gpcr_families()
         human_parent_gpcr_families = self.filter_out_non_human_parent_gpcr_families(parent_families)
         human_species = self.get_human_species()
+
+        class_representative_species_list = []
+        for gpcr_family in human_parent_gpcr_families:
+            class_representative_species_list.append(ClassRepresentativeSpecies(protein_family = gpcr_family, species = human_species))
+        ClassRepresentativeSpecies.objects.bulk_create(class_representative_species_list)
+
         yeast_parent_gpcr_families = self.filter_out_non_yeast_parent_gpcr_families(parent_families)
         yeast_non_human_parent_gpcr_families_set = set(yeast_parent_gpcr_families) - set(human_parent_gpcr_families)
         yeast_non_human_parent_gpcr_families = [gpcr_family for gpcr_family in yeast_parent_gpcr_families if gpcr_family in yeast_non_human_parent_gpcr_families_set]
         yeast_species = self.get_yeast_species()
+
+        class_representative_species_list = []
+        for gpcr_family in yeast_non_human_parent_gpcr_families:
+            class_representative_species_list.append(ClassRepresentativeSpecies(protein_family = gpcr_family, species = yeast_species))
+        ClassRepresentativeSpecies.objects.bulk_create(class_representative_species_list)
+
+
         gpcr_segments = ProteinSegment.objects.filter(proteinfamily='GPCR')
 
-        cross_class_most_similar_gpcr_pairs = {}
         cross_class_similarities = OrderedDict()
         proteins = None
         i = 1
@@ -152,22 +165,28 @@ class Command(BaseBuild):
             while_loop_continue = False
             while True:
                 cross_class_similarities2 = OrderedDict()
-                cross_class_most_similar_gpcr_pairs2 = {}
                 for clim in range(0,selected_parent_gpcr_families_protein_num[gpcr_class],step1):
                     
                     gpcr_class_proteins = selected_parent_gpcr_families_protein[gpcr_class]
                     gpcr_class_proteins = gpcr_class_proteins[clim:clim+step1]
-                    # gpcr_class_proteins = gpcr_class_proteins[:10] #uncomment for testing
+                    if options['limit']:
+                        gpcr_class_proteins = gpcr_class_proteins[:options['limit']]
                     
                     for gpcr_class2 in selected_parent_gpcr_families[i:]:
                         
                         for clim2 in range(0,selected_parent_gpcr_families_protein_num[gpcr_class2],step2):
                             if options['verbose']:
-                                print(gpcr_class,"from:"+str(clim+1),"to:"+str(clim+step1),"(of:{})".format(selected_parent_gpcr_families_protein_num[gpcr_class]),\
+                                if options['limit']:
+                                    print(gpcr_class,"from:"+str(clim+1),"to:"+str(clim+options['limit']),"(of:{})".format(selected_parent_gpcr_families_protein_num[gpcr_class]),\
+                                    'vs',gpcr_class2,"from:"+str(clim2+1),"to:"+str(clim2+options['limit']),"(of:{})".format(selected_parent_gpcr_families_protein_num[gpcr_class2]))
+                                else:
+                                    print(gpcr_class,"from:"+str(clim+1),"to:"+str(clim+step1),"(of:{})".format(selected_parent_gpcr_families_protein_num[gpcr_class]),\
                                     'vs',gpcr_class2,"from:"+str(clim2+1),"to:"+str(clim2+step2),"(of:{})".format(selected_parent_gpcr_families_protein_num[gpcr_class2]))
                             gpcr_class2_proteins = selected_parent_gpcr_families_protein[gpcr_class2]
                             gpcr_class2_proteins = gpcr_class2_proteins[clim2:clim2+step2]
-                            # gpcr_class2_proteins = gpcr_class2_proteins[:10] #uncomment for testing
+
+                            if options['limit']:
+                                gpcr_class2_proteins = gpcr_class2_proteins[:options['limit']]
                             proteins = gpcr_class_proteins + gpcr_class2_proteins
 
                             cs_alignment = Alignment()
@@ -188,22 +207,75 @@ class Command(BaseBuild):
                                 pos += 1
 
 
-                            max_similarity = 0
+                            max_similarity = float('-inf')
+                            i_similarity_value = float('-inf')
+                            max_identity = 0
+                            s_identity_value = 0
                             for protein1 in gpcr_class_proteins:
                                 for protein2 in gpcr_class2_proteins:
-                                    pos = entry_name_2_position[protein1.entry_name]
-                                    similarity_value = int(cs_alignment.similarity_matrix[protein2.entry_name]['values'][pos][0])
-                                    if  similarity_value > max_similarity:
+                                    pos_s = entry_name_2_position[protein1.entry_name]
+                                    similarity_value = int(cs_alignment.similarity_matrix[protein2.entry_name]['values'][pos_s][0])
+                                    pos_i = entry_name_2_position[protein2.entry_name]
+                                    identity_value = int(cs_alignment.similarity_matrix[protein1.entry_name]['values'][pos_i][0])
+                                    if identity_value > max_identity or (identity_value == max_identity and similarity_value > i_similarity_value):
+                                        max_identity = identity_value
+                                        i_protein_tuple = (protein1,protein2)
+                                        i_similarity_value = similarity_value
+                                        i_protein_tuple_w = []
+                                    elif identity_value == max_identity and similarity_value == i_similarity_value:
+                                        i_protein_tuple_w.append((protein1,protein2))
+                                        # text = protein1.entry_name+' vs '+protein2.entry_name+' with highest identity tied with '+' vs '.join([p.entry_name for p in i_protein_tuple])+'.'
+                                        # print('WARNING: '+text, file=sys.stderr)
+                                        # logger.warning(text)
+                                            
+                                    if  similarity_value > max_similarity or (similarity_value == max_similarity and identity_value > s_identity_value):
                                         max_similarity = similarity_value
-                                        protein_tuple = (protein1,protein2)
+                                        s_protein_tuple = (protein1,protein2)
+                                        s_identity_value = identity_value
+                                        s_protein_tuple_w = []
+                                    elif similarity_value == max_similarity and identity_value == s_identity_value:
+                                        s_protein_tuple_w.append((protein1,protein2))
+                                        # text = protein1.entry_name+' vs '+protein2.entry_name+' with highest similarity tied with '+' vs '.join([p.entry_name for p in s_protein_tuple])+'.'
+                                        # print('WARNING: '+text, file=sys.stderr)
+                                        # logger.warning(text)
                                         
-                            if gpcr_class2.name in cross_class_similarities2:
-                                if cross_class_similarities2[gpcr_class2.name] < max_similarity:
-                                    cross_class_similarities2[gpcr_class2.name] = max_similarity
-                                    cross_class_most_similar_gpcr_pairs2[gpcr_class2] = protein_tuple
+                            if gpcr_class2 in cross_class_similarities2:
+                                if cross_class_similarities2[gpcr_class2]['identity'] < max_identity or (cross_class_similarities2[gpcr_class2]['identity'] == max_identity 
+                                                                                                and cross_class_similarities2[gpcr_class2]['i_similarity_value'] < i_similarity_value):
+                                    cross_class_similarities2[gpcr_class2]['identity'] = max_identity
+                                    cross_class_similarities2[gpcr_class2]['identity_gpcr_pair'] = i_protein_tuple
+                                    cross_class_similarities2[gpcr_class2]['i_similarity_value']  = i_similarity_value
+                                    cross_class_similarities2[gpcr_class2]['identity_gpcr_pair_w'] = []
+                                elif (cross_class_similarities2[gpcr_class2]['identity'] == max_identity
+                                                                                                and cross_class_similarities2[gpcr_class2]['i_similarity_value'] == i_similarity_value):
+                                    cross_class_similarities2[gpcr_class2]['identity_gpcr_pair_w'] += i_protein_tuple_w
+                                    # text = 'vs_'.join([p.entry_name for p in cross_class_similarities2[gpcr_class2]['identity_gpcr_pair']])+' with highest identity tied with '+' vs '.join([p.entry_name for p in i_protein_tuple])+'.'
+                                    # print('WARNING: '+text, file=sys.stderr)
+                                    # logger.warning(text)
+                                if cross_class_similarities2[gpcr_class2]['similarity'] < max_similarity or (cross_class_similarities2[gpcr_class2]['similarity'] == max_similarity 
+                                                                                                and cross_class_similarities2[gpcr_class2]['s_identity_value'] < s_identity_value):
+                                    cross_class_similarities2[gpcr_class2]['similarity'] = max_similarity
+                                    cross_class_similarities2[gpcr_class2]['similarity_gpcr_pair'] = s_protein_tuple
+                                    cross_class_similarities2[gpcr_class2]['s_identity_value']  = s_identity_value
+                                    cross_class_similarities2[gpcr_class2]['similarity_gpcr_pair_w'] = []
+                                elif (cross_class_similarities2[gpcr_class2]['similarity'] == max_similarity
+                                                                                                and cross_class_similarities2[gpcr_class2]['s_identity_value'] == s_identity_value):
+                                    cross_class_similarities2[gpcr_class2]['similarity_gpcr_pair_w'] += s_protein_tuple_w
+
+                                    
                             else:
-                                cross_class_similarities2[gpcr_class2.name] = max_similarity
-                                cross_class_most_similar_gpcr_pairs2[gpcr_class2] = protein_tuple
+                                # cross_class_similarities2[gpcr_class2] = {'identity':None,'similarity':None,
+                                #              'identity_gpcr_pair': None,'similarity_gpcr_pair': None}
+                                cross_class_similarities2[gpcr_class2] = {}
+                                cross_class_similarities2[gpcr_class2]['identity'] = max_identity
+                                cross_class_similarities2[gpcr_class2]['identity_gpcr_pair'] = i_protein_tuple
+                                cross_class_similarities2[gpcr_class2]['i_similarity_value']  = i_similarity_value
+                                cross_class_similarities2[gpcr_class2]['identity_gpcr_pair_w'] = i_protein_tuple_w
+                                cross_class_similarities2[gpcr_class2]['similarity'] = max_similarity
+                                cross_class_similarities2[gpcr_class2]['similarity_gpcr_pair'] = s_protein_tuple
+                                cross_class_similarities2[gpcr_class2]['s_identity_value']  = s_identity_value
+                                cross_class_similarities2[gpcr_class2]['similarity_gpcr_pair_w'] = s_protein_tuple_w
+
                         if while_loop_continue:
                             break
                     del proteins
@@ -224,39 +296,58 @@ class Command(BaseBuild):
                     step1=initial_step1
                     step2=initial_step2
                     step_halved = False
-                cross_class_similarities[gpcr_class.name] = cross_class_similarities2
-                cross_class_most_similar_gpcr_pairs[gpcr_class] = cross_class_most_similar_gpcr_pairs2
+                cross_class_similarities[gpcr_class] = cross_class_similarities2
                 del selected_parent_gpcr_families_protein[gpcr_class]
+                for gpcr_class2 in cross_class_similarities2:
+                    for type in ('identity','similarity'):
+                        if len(cross_class_similarities2[gpcr_class2][type+'_gpcr_pair_w']) > 0:
+                            text = ' vs '.join([p.entry_name for p in cross_class_similarities2[gpcr_class2][type+'_gpcr_pair']])+' with highest '+type+' tied with '+\
+                            ', '.join([' vs '.join([p.entry_name for p in protein_tuple]) for protein_tuple in cross_class_similarities2[gpcr_class2][type+'_gpcr_pair_w']])+'.'
+                            print('WARNING: '+text, file=sys.stderr)
+                            logger.warning(text)
                 i += 1
                 break    
 
         # for key in  cross_class_similarities:
         #   print(key,cross_class_similarities[key])
         if options['print_results']:
-            print("[Protein_pairs]")
-            for gpcr_class in cross_class_most_similar_gpcr_pairs:      
-                for gpcr_class2 in cross_class_most_similar_gpcr_pairs[gpcr_class]:
-                    protein1,protein2 = cross_class_most_similar_gpcr_pairs[gpcr_class][gpcr_class2]
+            print("[Similarity_protein_pairs]")
+            for gpcr_class in cross_class_similarities:      
+                for gpcr_class2 in cross_class_similarities[gpcr_class]:
+                    protein1,protein2 = cross_class_similarities[gpcr_class][gpcr_class2]['similarity_gpcr_pair']
                     print(';'.join((gpcr_class.name,gpcr_class2.name,protein1.entry_name,protein2.entry_name)))
-            print("[End Protein_pairs]")
+            print("[End Similarity_protein_pairs]")
+            print("[Identity_protein_pairs]")
+            for gpcr_class in cross_class_similarities:      
+                for gpcr_class2 in cross_class_similarities[gpcr_class]:
+                    protein1,protein2 = cross_class_similarities[gpcr_class][gpcr_class2]['identity_gpcr_pair']
+                    print(';'.join((gpcr_class.name,gpcr_class2.name,protein1.entry_name,protein2.entry_name)))
+            print("[End Identity_protein_pairs]")
 
             cross_class_similarity_matrix = OrderedDict()
-            selected_parent_gpcr_families_names = [gpcr_class.name for gpcr_class in selected_parent_gpcr_families]
-            for key in selected_parent_gpcr_families_names:
+            i = 0
+            for gpcr_class in selected_parent_gpcr_families:
+                j = 0
                 row = []
-                for key2 in selected_parent_gpcr_families_names:
-                    if key == key2:
+                for gpcr_class2 in selected_parent_gpcr_families:
+                    if gpcr_class == gpcr_class2:
                         row.append('-')
+                        j += 1
                         continue
-                    if key in cross_class_similarities:
-                        if key2 in cross_class_similarities[key]:
-                            row.append(str(cross_class_similarities[key][key2]))
-                        else:
-                            row.append(str(cross_class_similarities[key2][key]))
+                    if i > j:
+                        value_type = 'similarity'
                     else:
-                        row.append(str(cross_class_similarities[key2][key]))
-                cross_class_similarity_matrix[key] = row
-
+                        value_type = 'identity'
+                    if gpcr_class in cross_class_similarities:
+                        if gpcr_class2 in cross_class_similarities[gpcr_class]:
+                            row.append(str(cross_class_similarities[gpcr_class][gpcr_class2][value_type]))
+                        else:
+                            row.append(str(cross_class_similarities[gpcr_class2][gpcr_class][value_type]))
+                    else:
+                        row.append(str(cross_class_similarities[gpcr_class2][gpcr_class][value_type]))
+                    j += 1
+                cross_class_similarity_matrix[gpcr_class.name] = row
+                i += 1
             print("[Matrix]")
             headers = cross_class_similarity_matrix.keys()
             print(';'+';'.join(list(headers)))
@@ -264,15 +355,22 @@ class Command(BaseBuild):
                 print(("{};"+';'.join(["{}" for i in range(0,len(cross_class_similarity_matrix[key]))])).format(key,*cross_class_similarity_matrix[key]))
             print("[End Matrix]")
             if options['verbose']: 
-                print("[Human readable Protein_pairs]")
-                gpcr_class_name_max_len = max([len(g.name) for g in cross_class_most_similar_gpcr_pairs])
-                for gpcr_class in cross_class_most_similar_gpcr_pairs:      
-                    for gpcr_class2 in cross_class_most_similar_gpcr_pairs[gpcr_class]:
-                        protein1,protein2 = cross_class_most_similar_gpcr_pairs[gpcr_class][gpcr_class2]
+                print("[Human readable Similarity_protein_pairs]")
+                for gpcr_class in cross_class_similarities:      
+                    for gpcr_class2 in cross_class_similarities[gpcr_class]:
+                        protein1,protein2 = cross_class_similarities[gpcr_class][gpcr_class2]['similarity_gpcr_pair']
                         print('{:{w}s} vs {:{w}s}'.format(gpcr_class.name[:matrix_header_max_length],gpcr_class2.name[:matrix_header_max_length],\
                                                         w=matrix_header_max_length),'{:>{w}s} vs {:>{w}s}'.format(protein1.entry_name,protein2.entry_name,\
                                                                                                                 w=25))
-                print("[End Human readable Protein_pairs]")
+                print("[End Human readable Similarity__pairs]")
+                print("[Human readable Identity_protein_pairs]")
+                for gpcr_class in cross_class_similarities:      
+                    for gpcr_class2 in cross_class_similarities[gpcr_class]:
+                        protein1,protein2 = cross_class_similarities[gpcr_class][gpcr_class2]['identity_gpcr_pair']
+                        print('{:{w}s} vs {:{w}s}'.format(gpcr_class.name[:matrix_header_max_length],gpcr_class2.name[:matrix_header_max_length],\
+                                                        w=matrix_header_max_length),'{:>{w}s} vs {:>{w}s}'.format(protein1.entry_name,protein2.entry_name,\
+                                                                                                                w=25))
+                print("[End Human readable Identity__pairs]")
 
                 print("[Human readable Matrix]")
                 headers = cross_class_similarity_matrix.keys()
@@ -287,11 +385,26 @@ class Command(BaseBuild):
         ClassSimilarity.custom_objects.truncate_table() #custom_objects is a custom manager, see ClassSimilarity model definition
         if options['verbose']: print('Saving new table...')
         class_similarity_list = []
-        for gpcr_class in cross_class_most_similar_gpcr_pairs:      
-            for gpcr_class2 in cross_class_most_similar_gpcr_pairs[gpcr_class]:
-                protein1,protein2 = cross_class_most_similar_gpcr_pairs[gpcr_class][gpcr_class2]
-                class_similarity_list.append(ClassSimilarity(protein_family1=gpcr_class,protein_family2=gpcr_class2,protein1=protein1,protein2=protein2,similarity=cross_class_similarities[gpcr_class.name][gpcr_class2.name]))
+        for gpcr_class in cross_class_similarities:      
+            for gpcr_class2 in cross_class_similarities[gpcr_class]:
+                s_protein1,s_protein2 = cross_class_similarities[gpcr_class][gpcr_class2]['similarity_gpcr_pair']
+                i_protein1,i_protein2 = cross_class_similarities[gpcr_class][gpcr_class2]['identity_gpcr_pair']
+                class_similarity_list.append(ClassSimilarity(protein_family1=gpcr_class,protein_family2=gpcr_class2,similar_protein1=s_protein1,similar_protein2=s_protein2,
+                                                             ident_protein1=i_protein1,ident_protein2=i_protein2,
+                                                             similarity=cross_class_similarities[gpcr_class][gpcr_class2]['similarity'],
+                                                               identity=cross_class_similarities[gpcr_class][gpcr_class2]['identity']))
         ClassSimilarity.objects.bulk_create(class_similarity_list)
+
+        class_similarity_ties_list = []
+        
+        for gpcr_class in cross_class_similarities:      
+            for gpcr_class2 in cross_class_similarities[gpcr_class]:
+                class_similarity = ClassSimilarity.objects.get(protein_family1=gpcr_class,protein_family2=gpcr_class2)
+                for type in ('identity','similarity'):
+                    for protein_pair in cross_class_similarities[gpcr_class][gpcr_class2][type+'_gpcr_pair_w']:
+                        protein1,protein2 = protein_pair
+                        class_similarity_ties_list.append(ClassSimilarityTie(class_similarity=class_similarity,protein1=protein1,protein2=protein2,type=ClassSimilarityType.__dict__[type.upper()]))
+        ClassSimilarityTie.objects.bulk_create(class_similarity_ties_list)                
         if options['verbose']: print('Done.')
 
      

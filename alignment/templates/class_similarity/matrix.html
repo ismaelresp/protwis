@@ -9,7 +9,8 @@
     <script>
       $(function () {
         $("[data-toggle='popover']").popover();
-        gray_scale_table($("#alignment_class_similarity_matrix_table"),["color-set1"],1);
+        gray_scale_table($("#alignment_class_similarity_matrix_table"),["color-set1"],null);
+        gray_scale_table($("#alignment_class_similarity_matrix_table"),["color-set2"],null);
       });
 
       
@@ -48,9 +49,9 @@
             <th class="info">{{ i }}. {{ v.name|safe }}</th>
             {% for col in v.values %}
               {% with j=forloop.counter %}
-              <td class="text-center{% if col.1 != '-' %}{% endif %} color-set1">
+              <td class="text-center{% if col.1 != '-' %}{% endif %} {% if i >= j %}color-set1{% elif i <= j %}color-set2{% endif %}">
                 {% if col.1 != '-' %}<div data-html="true" data-toggle="popover" data-trigger="click hover" data-placement="below" data-html="true"
-                 data-content="{% if i > j %}{{ col.2.1 }} vs {{ col.2.0 }}{% else %}{{ col.2.0 }} vs {{ col.2.1 }}{% endif %}">
+                 data-content="{% if i > j %}{{ col.2.1|safe }} vs {{ col.2.0|safe }}{% else %}{{ col.2.0|safe }} vs {{ col.2.1|safe }}{% endif %}">
                  {{ col.0 }}
                 </div>{% else %}{{ col.0 }}{% endif %}
               </td>

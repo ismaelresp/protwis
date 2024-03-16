@@ -251,12 +251,14 @@ function colorGradient(fraction, reverse, color1, color2, color3) {
 
 
 /* Create gray scale for numberic values in table. Assign either the "color-column" class to a cell (td object) to use min-max values for coloring
- *  only in that column, or assign the "color-set[int]" class to use min-max values spanning through multiple columns sharing the class set name.
+ *  only in that column, or assign the "color-set[int]" class to use min-max values spanning through multiple columns sharing the class set name
+ *  (only one class set per column).
  *  By default high values are colored dark. You can also add the "color-reverse" class to the cell to reverse this coloring.
  *
  *  @table: The table object
  *  @colorSetIds: An array of color-set[int] class name strings
- *  @firstRowIndex: Integer table row index starting from zero for the first row of the table where the first occurrence of a cell with class "color-set[int]" is found
+ *  @firstRowIndex: Integer table row index starting from zero for the first row of the table where the first occurrence of a cell with class "color-set[int]" is found.
+ *                  If set to null, it will set the for each column a different firstRowIndex corresponding to the first appearance of a "color-set[int]" class.
  */
 function gray_scale_table(table, colorSetIds = [], firstRowIndex = 0) {
   // Collect values for columns and sets
@@ -271,6 +273,7 @@ function gray_scale_table(table, colorSetIds = [], firstRowIndex = 0) {
   var colIdColorSet = {};
   var colorGradientAssigned = {};
   var colorGradients = {};
+  var parsedColumFlags = {};
   for (let [i, row] of [...table.find("tbody")[0].rows].entries()) {
     for (let [j, cell] of [...row.cells].entries()) {
       cols[parseInt(j,10)] = cols[j] || [];
@@ -284,9 +287,18 @@ function gray_scale_table(table, colorSetIds = [], firstRowIndex = 0) {
             if (cell.innerText !== "-" && cell.innerText !== "Full Bias") {
               sets[String(colorSetIds[k])].push(cell.innerText);
             }
-            if (i === firstRowIndex) {
-              colIdColorSet[parseInt(j,10)] = colorSetIds[k]; // Why should this be done only on the first row, and not just once per column (j increase) with a flag variable?
+            if (firstRowIndex === null) {
+              if (!parsedColumFlags.hasOwnProperty(j)) {
+                colIdColorSet[parseInt(j,10)] = colorSetIds[k];
+                parsedColumFlags[j] = true;
+              }
+            } else {
+              if (i === firstRowIndex) {
+                colIdColorSet[parseInt(j,10)] = colorSetIds[k]; // Why should this be done only on the first row, and not just once per column (j increase) with a flag variable?
+              }
             }
+
+
             colored = true;
             break;
           }
