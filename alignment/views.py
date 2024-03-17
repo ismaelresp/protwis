@@ -535,25 +535,49 @@ def retrieve_class_similarity_matrix(output_type='html'):
                                                                     'ident_protein1__entry_name','ident_protein2__entry_name',
                                                                     'ident_protein1__name','ident_protein2__name','identity','similarity')\
                                                                     .order_by('protein_family1__slug','protein_family2__slug'):
-        if class_pair['protein_family1__name'] not in cross_class_similarities:
-            cross_class_similarities[class_pair['protein_family1__name']] = OrderedDict()
-            # cross_class_most_similar_gpcr_pairs[class_pair['protein_family1__name']] = {}
-        if class_pair['protein_family2__name'] not in cross_class_similarities[class_pair['protein_family1__name']]:
-            cross_class_similarities[class_pair['protein_family1__name']][class_pair['protein_family2__name']] = {}
-        cross_class_similarities[class_pair['protein_family1__name']][class_pair['protein_family2__name']]['identity'] = class_pair['identity']
-        cross_class_similarities[class_pair['protein_family1__name']][class_pair['protein_family2__name']]['similarity'] = class_pair['similarity']
+        gpcr_class1_name = class_pair['protein_family1__name']
+        gpcr_class2_name = class_pair['protein_family2__name']
+        if gpcr_class1_name not in cross_class_similarities:
+            cross_class_similarities[gpcr_class1_name] = OrderedDict()
+            # cross_class_most_similar_gpcr_pairs[gpcr_class1_name] = {}
+        if gpcr_class2_name not in cross_class_similarities[gpcr_class1_name]:
+            cross_class_similarities[gpcr_class1_name][gpcr_class2_name] = {}
+        cross_class_similarities[gpcr_class1_name][gpcr_class2_name]['identity'] = class_pair['identity']
+        cross_class_similarities[gpcr_class1_name][gpcr_class2_name]['similarity'] = class_pair['similarity']
         if output_type == 'html':
-            ident_protein1_name = Protein(name=class_pair['ident_protein1__name']).short
-            ident_protein2_name = Protein(name=class_pair['ident_protein2__name']).short
-            similar_protein1_name = Protein(name=class_pair['similar_protein1__name']).short
-            similar_protein2_name = Protein(name=class_pair['similar_protein2__name']).short
+            name_type = 'name'
+            ident_protein1_name = Protein(name=class_pair['ident_protein1__'+name_type]).short()
+            ident_protein2_name = Protein(name=class_pair['ident_protein2__'+name_type]).short()
+            similar_protein1_name = Protein(name=class_pair['similar_protein1__'+name_type]).short()
+            similar_protein2_name = Protein(name=class_pair['similar_protein2__'+name_type]).short()
         else:
-            ident_protein1_name = class_pair['ident_protein1__entry_name']
-            ident_protein2_name = class_pair['ident_protein2__entry_name']
-            similar_protein1_name = class_pair['similar_protein1__entry_name']
-            similar_protein2_name = class_pair['similar_protein2__entry_name']
-        cross_class_similarities[class_pair['protein_family1__name']][class_pair['protein_family2__name']]['identity_gpcr_pair'] = (ident_protein1_name,ident_protein2_name)
-        cross_class_similarities[class_pair['protein_family1__name']][class_pair['protein_family2__name']]['similarity_gpcr_pair'] = (similar_protein1_name,similar_protein2_name)
+            name_type = 'entry_name'
+            ident_protein1_name = class_pair['ident_protein1__'+name_type]
+            ident_protein2_name = class_pair['ident_protein2__'+name_type]
+            similar_protein1_name = class_pair['similar_protein1__'+name_type]
+            similar_protein2_name = class_pair['similar_protein2__'+name_type]
+        cross_class_similarities[gpcr_class1_name][gpcr_class2_name]['identity_gpcr_pair'] = (ident_protein1_name,ident_protein2_name)
+        cross_class_similarities[gpcr_class1_name][gpcr_class2_name]['identity_gpcr_pair_w'] = []
+        cross_class_similarities[gpcr_class1_name][gpcr_class2_name]['similarity_gpcr_pair'] = (similar_protein1_name,similar_protein2_name)
+        cross_class_similarities[gpcr_class1_name][gpcr_class2_name]['similarity_gpcr_pair_w'] = []
+
+        if class_pair['id'] in class_similarity_id_2_ties:
+            for tie in class_similarity_id_2_ties[class_pair['id']]:
+                if output_type == 'html':
+                    name_type = 'name'
+                    protein1 = Protein(name=tie['protein1__'+name_type]).short()
+                    protein2 = Protein(name=tie['protein2__'+name_type]).short()
+                else:
+                    name_type = 'entry_name'
+                    protein1 = tie['protein1__'+name_type]
+                    protein2 = tie['protein2__'+name_type]
+
+                if tie['type'] == ClassSimilarityType.IDENTITY:
+                    type = 'identity'
+                elif tie['type'] == ClassSimilarityType.SIMILARITY:
+                    type = 'similarity'
+                cross_class_similarities[class_pair['protein_family1__name']][class_pair['protein_family2__name']][type+'_gpcr_pair_w'].append((protein1,protein2))
+
 
     selected_parent_gpcr_families_names1 = OrderedDict()
     selected_parent_gpcr_families_names2 = OrderedDict()
@@ -565,8 +589,6 @@ def retrieve_class_similarity_matrix(output_type='html'):
         selected_parent_gpcr_families_names1[key] = None
 
     selected_parent_gpcr_families_names = selected_parent_gpcr_families_names1.keys()
-
-    print(selected_parent_gpcr_families_names)
     
     cross_class_similarity_matrix = OrderedDict()
     i = 0
@@ -583,11 +605,16 @@ def retrieve_class_similarity_matrix(output_type='html'):
                 type = 'identity'
             if key in cross_class_similarities:
                 if key2 in cross_class_similarities[key]:
-                    row.append([str(cross_class_similarities[key][key2][type]),str(cross_class_similarities[key][key2][type]//10),cross_class_similarities[key][key2][type+'_gpcr_pair']])
+                    sim = cross_class_similarities[key][key2]
                 else:
-                    row.append([str(cross_class_similarities[key2][key][type]),str(cross_class_similarities[key2][key][type]//10),cross_class_similarities[key2][key][type+'_gpcr_pair']])
+                    sim = cross_class_similarities[key2][key]
             else:
-                row.append([str(cross_class_similarities[key2][key][type]),str(cross_class_similarities[key2][key][type]//10),cross_class_similarities[key2][key][type+'_gpcr_pair']])
+                sim = cross_class_similarities[key2][key]
+            pairs = [sim[type+'_gpcr_pair']]
+            pairsw = sim[type+'_gpcr_pair_w']
+            if len(pairsw) > 0:
+                pairs += pairsw
+            row.append([str(sim[type]),str(sim[type]//10),pairs])
             j += 1
         if output_type == 'html':
             name = key+' ('+gpcr_family_name_2_class_representative_species[key]+')'

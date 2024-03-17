@@ -51,8 +51,19 @@
               {% with j=forloop.counter %}
               <td class="text-center{% if col.1 != '-' %}{% endif %} {% if i >= j %}color-set1{% elif i <= j %}color-set2{% endif %}">
                 {% if col.1 != '-' %}<div data-html="true" data-toggle="popover" data-trigger="click hover" data-placement="below" data-html="true"
-                 data-content="{% if i > j %}{{ col.2.1|safe }} vs {{ col.2.0|safe }}{% else %}{{ col.2.0|safe }} vs {{ col.2.1|safe }}{% endif %}">
-                 {{ col.0 }}
+                data-content="
+                  {% for pair in col.2 %}
+                    {% if i > j %}
+                      {{ pair.1|safe }} vs {{ pair.0|safe }}
+                    {% else %}
+                      {{ pair.0|safe }} vs {{ pair.1|safe }}
+                    {% endif %}
+                    {% if forloop.counter != pair|length %}
+                    <br>
+                    {% endif %}
+                  {% endfor %}">
+                 
+                  {{ col.0 }}
                 </div>{% else %}{{ col.0 }}{% endif %}
               </td>
               {% endwith %}
