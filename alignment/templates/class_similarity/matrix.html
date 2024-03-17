@@ -1,5 +1,6 @@
 {% extends "home/base.html" %}
 {% load static %}
+{% load utils %}
 
 {% block addon_css %}
 {% endblock %}
@@ -9,8 +10,18 @@
     <script>
       $(function () {
         $("[data-toggle='popover']").popover();
-        gray_scale_table($("#alignment_class_similarity_matrix_table"),["color-set1"],null);
-        gray_scale_table($("#alignment_class_similarity_matrix_table"),["color-set2"],null);
+        {% for m in m_list %}
+        {% with tabnum=forloop.counter %}
+          gray_scale_table($("#alignment_class_similarity_matrix_table_{{tabnum}}"),["color-set1"],null);
+          gray_scale_table($("#alignment_class_similarity_matrix_table_{{tabnum}}"),["color-set2"],null);
+        $('a[href="#alignment_class_similarity_matrix_tab{{tabnum}}"]').on('click',function() {
+          setTimeout(function() {
+            gray_scale_table($("#alignment_class_similarity_matrix_table_{{tabnum}}"),["color-set1"],null);
+            gray_scale_table($("#alignment_class_similarity_matrix_table_{{tabnum}}"),["color-set2"],null);
+          }, 200);
+        });
+        {% endwith %}
+        {% endfor%}
       });
 
       
@@ -19,60 +30,83 @@
 {% endblock %}
 
 {% block content %}
-{% block buttons %}
-<!-- Download button -->
-<div class="btn-group">
-  <button type="button" class="btn btn-sm btn-primary dropdown-toggle" data-toggle="dropdown" aria-haspopup="true"
-    aria-expanded="false">
-    <span class="glyphicon glyphicon-download"></span> Download <span class="caret"></span>
-  </button>
-  <ul class="dropdown-menu">
-    <li><a href="/alignment/class_similarity_matrix/csv">Spreadsheet (csv)</a></li>
+
+<!-- ### Create the panel tabs ### -->
+<ul class="nav nav-tabs">
+  {% for h in h_list %}
+  {% with i=forloop.counter %}
+    <li{% if i == 1 %} class="active"{% endif %}><a href="#alignment_class_similarity_matrix_tab{{i}}" data-toggle="tab" >{{h}}</a></li>
+  {% endwith %}
+  {% endfor %}
+</ul>
+<!-- ## Tab content ## -->
+<div class="tab-content">
+  {% for m in m_list %}
+  {% with tabnum=forloop.counter %}
+  <div id="alignment_class_similarity_matrix_tab{{tabnum}}" class="tab-pane fade in{% if tabnum == 1 %} active{% endif %}">
+      <div style="padding-top: 10px; font-size: 11px; white-space: nowrap;">
+
+        {% block buttons %}
+        <!-- Download button -->
+        <div class="btn-group">
+          <button type="button" class="btn btn-sm btn-primary dropdown-toggle" data-toggle="dropdown" aria-haspopup="true"
+            aria-expanded="false">
+            <span class="glyphicon glyphicon-download"></span> Download <span class="caret"></span>
+          </button>
+          <ul class="dropdown-menu">
+            {% with tabnum_1=tabnum|add:'-1' %}
+            <li><a href="/alignment/class_similarity_matrix/csv?classless={{csv_list|return_item:tabnum_1|return_item:'classless'}}&human_only={{csv_list|return_item:tabnum_1|return_item:'human_only'}}">Spreadsheet (csv)</a></li>
+            {% endwith%}
+          </div>
+        {% endblock %}
+        <p class="text-right">
+        </p>
+        <!-- matrix starts -->
+        <div class="table-responsive">
+            <table id="alignment_class_similarity_matrix_table_{{tabnum}}" class="table table-bordered table-condensed">
+                <tr>
+                    <th></th>
+                    {% for p in m %}
+                    {% with i=forloop.counter %}
+                    <th class="info text-center">{{ i }}</th>
+                    {% endwith %}
+                    {% endfor %}
+                </tr>
+                {% for p, v in m.items %}
+                <tr>
+                  {% with i=forloop.counter %}
+                    <th class="info">{{ i }}. {{ v.name|safe }}</th>
+                    {% for col in v.values %}
+                      {% with j=forloop.counter %}
+                      <td class="text-center{% if col.1 != '-' %}{% endif %} {% if i >= j %}color-set1{% elif i <= j %}color-set2{% endif %}">
+                        {% if col.1 != '-' %}<div data-html="true" data-toggle="popover" data-trigger="click hover" data-placement="below" data-html="true"
+                        data-content="
+                          {% for pair in col.2 %}
+                            {% if i > j %}
+                              {{ pair.1|safe }} vs {{ pair.0|safe }}
+                            {% else %}
+                              {{ pair.0|safe }} vs {{ pair.1|safe }}
+                            {% endif %}
+                            {% if forloop.counter != col.2|length %}
+                            <br>
+                            {% endif %}
+                          {% endfor %}">
+                        
+                          {{ col.0 }}
+                        </div>{% else %}{{ col.0 }}{% endif %}
+                      </td>
+                      {% endwith %}
+                    {% endfor %}
+                  {% endwith %}
+                    
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+        <!-- matrix alignment ends -->
+      </div>
+  </div>
+  {% endwith %}
+  {% endfor %}
 </div>
-{% endblock %}
-<p class="text-right">
-</p>
-<!-- matrix starts -->
-<div class="table-responsive">
-    <table id="alignment_class_similarity_matrix_table" class="table table-bordered table-condensed">
-        <tr>
-            <th></th>
-            {% for p in m %}
-            {% with i=forloop.counter %}
-            <th class="info text-center">{{ i }}</th>
-            {% endwith %}
-            {% endfor %}
-        </tr>
-        {% for p, v in m.items %}
-        <tr>
-          {% with i=forloop.counter %}
-            <th class="info">{{ i }}. {{ v.name|safe }}</th>
-            {% for col in v.values %}
-              {% with j=forloop.counter %}
-              <td class="text-center{% if col.1 != '-' %}{% endif %} {% if i >= j %}color-set1{% elif i <= j %}color-set2{% endif %}">
-                {% if col.1 != '-' %}<div data-html="true" data-toggle="popover" data-trigger="click hover" data-placement="below" data-html="true"
-                data-content="
-                  {% for pair in col.2 %}
-                    {% if i > j %}
-                      {{ pair.1|safe }} vs {{ pair.0|safe }}
-                    {% else %}
-                      {{ pair.0|safe }} vs {{ pair.1|safe }}
-                    {% endif %}
-                    {% if forloop.counter != col.2|length %}
-                    <br>
-                    {% endif %}
-                  {% endfor %}">
-                 
-                  {{ col.0 }}
-                </div>{% else %}{{ col.0 }}{% endif %}
-              </td>
-              {% endwith %}
-            {% endfor %}
-          {% endwith %}
-            
-        </tr>
-        {% endfor %}
-    </table>
-</div>
-<!-- matrix alignment ends -->
 {% endblock %}

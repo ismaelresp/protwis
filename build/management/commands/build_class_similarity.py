@@ -1,31 +1,20 @@
 from build.management.commands.base_build import Command as BaseBuild
-# from django.db import connection
-# from django.conf import settings
+
 from django.db.models import F 
 
 
-from protein.models import Protein, ProteinConformation, ProteinAnomaly, ProteinState, ProteinSegment, ProteinFamily, Species
+from protein.models import Protein, ProteinSegment, ProteinFamily, Species
 from alignment.models import ClassSimilarity, ClassSimilarityTie, ClassSimilarityType, ClassRepresentativeSpecies
-# from structure.models import Structure, StructureModel, StructureComplexModel, StatsText, PdbData, StructureModelpLDDT, StructureType, StructureExtraProteins
-# import structure.assign_generic_numbers_gpcr as as_gn
-# from residue.models import Residue
-# from common.models import WebResource, WebLink
-# from common.definitions import G_PROTEIN_DISPLAY_NAME as g_prot_dict
-# from signprot.models import SignprotComplex
-# from contactnetwork.cube import compute_interactions
-# from interaction.models import StructureLigandInteraction
 
 from common.alignment import Alignment
 
 from collections import OrderedDict
-import Bio.PDB as PDB
 import os
 import sys
 import logging
-# import zipfile
-# import shutil
+
 from datetime import datetime, date
-# import time
+
 
 
 starttime = datetime.now()
@@ -35,10 +24,8 @@ formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
 hdlr.setFormatter(formatter)
 logger.addHandler(hdlr)
 logger.setLevel(logging.INFO)
-structure_path = './structure/'
-pir_path = os.sep.join([structure_path, 'PIR'])
 
-classless_parent_gpcr_slugs = set(('008')) # name = Other GPCRs
+from common.definitions import CLASSLESS_PARENT_GPCR_SLUGS
 
 matrix_header_max_length = 20
 

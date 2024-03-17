@@ -27,6 +27,7 @@ from protein.models import Protein, ProteinSegment, ProteinFamily, ProteinSet
 from residue.models import ResidueNumberingScheme, ResiduePositionSet
 from alignment.models import ClassSimilarity, ClassSimilarityTie, ClassSimilarityType, ClassRepresentativeSpecies
 from seqsign.sequence_signature import SequenceSignature, signature_score_excel
+from common.definitions import CLASSLESS_PARENT_GPCR_SLUGS
 
 from collections import OrderedDict
 from copy import deepcopy
@@ -495,9 +496,14 @@ def render_alignment_excel(request):
 
     return response
 
-def retrieve_class_similarity_matrix(output_type='html'):
+def retrieve_class_similarity_matrix(output_type='html',classless=False,human_only=False):
     cross_class_similarities = OrderedDict()
     class_representative_species_list = ClassRepresentativeSpecies.objects.all().prefetch_related()
+    if human_only:
+        class_representative_species_list = class_representative_species_list.filter(species__common_name__iexact='human')
+        human_classes_set = set()
+        for class_representative_species in class_representative_species_list:
+            human_classes_set.add(class_representative_species.protein_family)
     if output_type == 'html':
         gpcr_family_name_2_class_representative_species = {}
         for class_representative_species in class_representative_species_list:
@@ -524,9 +530,17 @@ def retrieve_class_similarity_matrix(output_type='html'):
             class_similarity_id_2_ties[class_similarity_id] = []
         class_similarity_id_2_ties[class_similarity_id].append(tie)
 
-    for class_pair in ClassSimilarity.objects.all().select_related('protein_family1','protein_family2',\
-                                                                    'protein1','protein2')\
-                                                                    .values('id','protein_family1__slug','protein_family1__name',
+    class_sim = ClassSimilarity.objects.all().select_related('protein_family1','protein_family2')
+    if human_only:
+        class_sim = class_sim.filter(protein_family1__in=human_classes_set,protein_family2__in=human_classes_set)
+
+
+    if not classless:
+        class_sim = class_sim.exclude(protein_family1__slug__in=CLASSLESS_PARENT_GPCR_SLUGS)
+        class_sim = class_sim.exclude(protein_family2__slug__in=CLASSLESS_PARENT_GPCR_SLUGS)
+
+
+    for class_pair in class_sim.values('id','protein_family1__slug','protein_family1__name',
                                                                    'protein_family2__slug','protein_family2__name',
                                                                     'similar_protein1__entry_name','similar_protein2__entry_name',
                                                                     'similar_protein1__name','similar_protein2__name',
@@ -621,14 +635,39 @@ def retrieve_class_similarity_matrix(output_type='html'):
         i += 1 
     return (cross_class_similarity_matrix,selected_parent_gpcr_families_names)
 
-def render_class_similarity_matrix(request):
-    r = retrieve_class_similarity_matrix()
+render_class_similarity_csv_matrix_urls = ['human_only_without_classless', 'human_only_with_classless','all_without_classless','all_with_classless']
 
-    return render(request, 'class_similarity/matrix.html', {'p': r[1],'m': r[0]})
+def render_class_similarity_matrix(request):
+    r_human_only_without_classless = retrieve_class_similarity_matrix(classless=False,human_only=True)
+    r_human_only_with_classless = retrieve_class_similarity_matrix(classless=True,human_only=True)
+    r_all_without_classless = retrieve_class_similarity_matrix(classless=False,human_only=False)
+    r_all_with_classless = retrieve_class_similarity_matrix(classless=True,human_only=False)
+
+    list_tmp = [r_human_only_without_classless,r_human_only_with_classless,r_all_without_classless,r_all_with_classless]
+
+    h_list = ['Human only', 'Human only (including Classless)','All','All (including Classless)']
+    csv_list = [{'classless': '0','human_only':'1'},{'classless': '1','human_only':'1'},{'classless': '0','human_only':'0'},{'classless': '1','human_only':'0'}]
+
+    return render(request, 'class_similarity/matrix.html', {'csv_list':csv_list,'h_list': h_list, 'p_list': [r[1] for r in list_tmp],'m_list': [r[0] for r in list_tmp]})
 
 def render_class_similarity_csv_matrix(request):
-    r = retrieve_class_similarity_matrix(output_type='csv')
-    
+    classless = True
+    human_only = False
+    try:
+        classless_g = int(request.GET.get('classless', 1))
+        if classless_g == 0:
+            classless = False
+    except ValueError as e:
+        pass
+    try:
+        human_only_g = int(request.GET.get('human_only', 0))
+        if abs(human_only_g) > 0:
+            human_only = True
+    except ValueError as e:
+        pass
+
+    r = retrieve_class_similarity_matrix(output_type='csv',classless=classless,human_only=human_only)
+
     response = render(request, 'class_similarity/matrix_csv.html', {'p': r[1],'m': r[0]})
     response['Content-Disposition'] = "attachment; filename=" + site_title(request)["site_title"] + "_similaritymatrix.csv"
     return response
