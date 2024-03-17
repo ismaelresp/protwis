@@ -58,7 +58,7 @@
                     {% else %}
                       {{ pair.0|safe }} vs {{ pair.1|safe }}
                     {% endif %}
-                    {% if forloop.counter != pair|length %}
+                    {% if forloop.counter != col.2|length %}
                     <br>
                     {% endif %}
                   {% endfor %}">
