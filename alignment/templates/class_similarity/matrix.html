@@ -14,17 +14,9 @@
         {% with tabnum=forloop.counter %}
           gray_scale_table($("#alignment_class_similarity_matrix_table_{{tabnum}}"),["color-set1"],null);
           gray_scale_table($("#alignment_class_similarity_matrix_table_{{tabnum}}"),["color-set2"],null);
-        $('a[href="#alignment_class_similarity_matrix_tab{{tabnum}}"]').on('click',function() {
-          setTimeout(function() {
-            gray_scale_table($("#alignment_class_similarity_matrix_table_{{tabnum}}"),["color-set1"],null);
-            gray_scale_table($("#alignment_class_similarity_matrix_table_{{tabnum}}"),["color-set2"],null);
-          }, 200);
-        });
         {% endwith %}
         {% endfor%}
       });
-
-      
     </script>
 
 {% endblock %}
@@ -43,7 +35,7 @@
 <div class="tab-content">
   {% for m in m_list %}
   {% with tabnum=forloop.counter %}
-  <div id="alignment_class_similarity_matrix_tab{{tabnum}}" class="tab-pane fade in{% if tabnum == 1 %} active{% endif %}">
+  <div id="alignment_class_similarity_matrix_tab{{tabnum}}" class="tab-pane fade{% if tabnum == 1 %} in active{% endif %}">
       <div style="padding-top: 10px; font-size: 11px; white-space: nowrap;">
 
         {% block buttons %}
@@ -78,8 +70,8 @@
                     <th class="info">{{ i }}. {{ v.name|safe }}</th>
                     {% for col in v.values %}
                       {% with j=forloop.counter %}
-                      <td class="text-center{% if col.1 != '-' %}{% endif %} {% if i >= j %}color-set1{% elif i <= j %}color-set2{% endif %}">
-                        {% if col.1 != '-' %}<div data-html="true" data-toggle="popover" data-trigger="click hover" data-placement="below" data-html="true"
+                      <td class="text-center{% if col.1 != '-' %}{% endif %} {% if i >= j %}color-set1{% elif i <= j %}color-set2{% endif %}">{% if col.1 != '-' %}<div
+                         data-html="true" data-toggle="popover" data-trigger="click hover" data-placement="below" data-html="true"
                         data-content="
                           {% for pair in col.2 %}
                             {% if i > j %}
@@ -90,11 +82,7 @@
                             {% if forloop.counter != col.2|length %}
                             <br>
                             {% endif %}
-                          {% endfor %}">
-                        
-                          {{ col.0 }}
-                        </div>{% else %}{{ col.0 }}{% endif %}
-                      </td>
+                          {% endfor %}">{{ col.0 }}</div>{% else %}{{ col.0 }}{% endif %}</td>
                       {% endwith %}
                     {% endfor %}
                   {% endwith %}

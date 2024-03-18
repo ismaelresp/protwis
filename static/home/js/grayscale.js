@@ -249,6 +249,11 @@ function colorGradient(fraction, reverse, color1, color2, color3) {
   return gradient;
 }
 
+if(typeof String.prototype.trim !== 'function') {
+  String.prototype.trim = function() {
+    return this.replace(/^\s+|\s+$/g, ''); 
+  }
+}
 
 /* Create gray scale for numberic values in table. Assign either the "color-column" class to a cell (td object) to use min-max values for coloring
  *  only in that column, or assign the "color-set[int]" class to use min-max values spanning through multiple columns sharing the class set name
@@ -278,14 +283,15 @@ function gray_scale_table(table, colorSetIds = [], firstRowIndex = 0) {
     for (let [j, cell] of [...row.cells].entries()) {
       cols[parseInt(j,10)] = cols[j] || [];
       var colored = false;
-      if (cell.innerText !== "-" && cell.innerText !== "Full Bias" && cell.classList.contains("color-column")) {
-        cols[j].push(cell.innerText);
+      var cell_innerText = cell.innerText.trim(); // fixes issues with whitespace normalitzation (e.g. bugs on browser or js libraries)
+      if (cell_innerText !== "-" && cell_innerText !== "Full Bias" && cell.classList.contains("color-column")) {
+        cols[j].push(cell_innerText);
         colored = true;
       } else {
         for (let k = 0; k < colorSetIds.length; k++) {
           if (cell.classList.contains(colorSetIds[k])) {
-            if (cell.innerText !== "-" && cell.innerText !== "Full Bias") {
-              sets[String(colorSetIds[k])].push(cell.innerText);
+            if (cell_innerText !== "-" && cell_innerText !== "Full Bias") {
+              sets[String(colorSetIds[k])].push(cell_innerText);
             }
             if (firstRowIndex === null) {
               if (!parsedColumFlags.hasOwnProperty(j)) {
@@ -351,6 +357,7 @@ function gray_scale_table(table, colorSetIds = [], firstRowIndex = 0) {
   var color;
   for (let [i, row] of [...table.find("tbody")[0].rows].entries()) {
     for (let [j, cell] of [...row.cells].entries()) {
+      var cell_innerText = cell.innerText.trim(); // fixes issues with whitespace normalitzation (e.g. bugs on browser or js libraries)
       var calculate_color = false;
       var reverse = false;
       var abs = false;
@@ -366,7 +373,7 @@ function gray_scale_table(table, colorSetIds = [], firstRowIndex = 0) {
       }
       // Assign color to cell
       if (calculate_color) {
-        value = parseFloat(cell.innerText);
+        value = parseFloat(cell_innerText);
         if (cell.classList.contains("color-reverse")) {
           reverse = true;
         }
