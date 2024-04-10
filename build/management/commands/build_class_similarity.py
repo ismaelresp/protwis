@@ -44,10 +44,16 @@ class Command(BaseBuild):
         parser.add_argument('--print_results', help='Prints results in stdout.', default=False, action='store_true')
         parser.add_argument('--limit',type=int, help='For testing purposes. Use only any indicated number of GPCRs per class and per batch. Default 10.', default=False, action='store')
        
-    def get_parent_gpcr_families(self):
+    def get_parent_gpcr_families(self,exclude_classless_artificial_class=True,include_classless_natural_classes=True):
         parent_family = ProteinFamily.objects.get(slug='000') 
         parent_gpcr_families = ProteinFamily.objects.filter(parent_id=parent_family.pk, slug__startswith='0').exclude(pk=parent_family.pk)
-        return sorted(parent_gpcr_families,key=lambda f: (int(f.slug)))
+        if exclude_classless_artificial_class:
+            for slug in CLASSLESS_PARENT_GPCR_SLUGS:
+                parent_gpcr_families = parent_gpcr_families.exclude(slug__startswith=slug)
+        if include_classless_natural_classes:
+            classless_protein_families = self.get_classless_bottom_protein_families()
+        parent_gpcr_families = list(parent_gpcr_families)+classless_protein_families
+        return sorted(parent_gpcr_families,key=lambda f: (int(f.slug.split('_')[0])))
     
     def get_human_species(self):
         return Species.objects.get(common_name__iexact='Human')
@@ -55,7 +61,69 @@ class Command(BaseBuild):
     def get_yeast_species(self):
         return Protein.objects.filter(entry_name__iendswith='_yeast')[0].species
     
+    def __slug_tree_branch(self, slug_parts,slug_tree_dict):
+        #print('hola0:',slug_tree_dict,slug_parts)
+
+        if len(slug_parts) == 1:
+            slug_tree_dict[slug_parts[0]] = None
+            #print('hola1:',slug_tree_dict)
+            return slug_tree_dict
+        else:
+            if slug_parts[0] in slug_tree_dict:
+                slug_subtree_dict = slug_tree_dict[slug_parts[0]]
+                if slug_subtree_dict is None:
+                    slug_subtree_dict = {}
+            else:
+                slug_subtree_dict = {}
+            slug_tree_dict[slug_parts[0]] = self.__slug_tree_branch(slug_parts[1:],slug_subtree_dict)
+            #print('hola3:',slug_tree_dict)
+        return slug_tree_dict
+
+    def __sort_slug_tree_branch(self, slug_tree_dict):
+        slug_tree_ordered_dict = OrderedDict()
+        for slug in sorted(sorted(slug_tree_dict.keys(),key = lambda x: int(x[1:])),key = lambda x: x[0]):
+            slug_subtree_dict = slug_tree_dict[slug]
+            if slug_subtree_dict is not None:
+                slug_tree_ordered_dict[slug] = self.__sort_slug_tree_branch(slug_subtree_dict)
+            else:
+                slug_tree_ordered_dict[slug] = None
+        return slug_tree_ordered_dict
+    
+    def __parse_slug_tree_(self, slug_tree_dict,slug_list_list,slug_list):
+        for slug,subtree in slug_tree_dict.items():
+            slug_list.append(slug)
+            if subtree is not None:
+                self.__parse_slug_tree_(subtree,slug_list_list,slug_list)
+            else:
+                slug_list_list.append(slug_list.copy())
+            slug_list.pop()
+    
+    def get_classless_bottom_protein_families(self):
+        classless_parent_gpcrs_slugs_list = sorted(sorted(CLASSLESS_PARENT_GPCR_SLUGS,key = lambda x: int(x[1:])),key = lambda x: x[0])
+        parent_gpcr_families = ProteinFamily.objects.filter(slug__startswith=classless_parent_gpcrs_slugs_list[0])
+        
+        for slug in classless_parent_gpcrs_slugs_list[1:]:
+            parent_gpcr_families = parent_gpcr_families.filter(slug__startswith=slug)
+        
+        slug_2_family_dict = {}
+        for f in parent_gpcr_families:
+            slug_2_family_dict[f.slug] = f
+        family_slug_tree_dict = {}
+        for slug in slug_2_family_dict.keys():
+            slug_parts = slug.split('_')
+            self.__slug_tree_branch(slug_parts,family_slug_tree_dict)
+        family_slug_tree_ordered_dict = self.__sort_slug_tree_branch(family_slug_tree_dict)
+        slug_list_list = []
+        slug_list = []
+        self.__parse_slug_tree_(family_slug_tree_ordered_dict,slug_list_list,slug_list)
+        classless_bottom_slugs_list = ['_'.join(slug_list) for slug_list in slug_list_list]
+        return [slug_2_family_dict[slug] for slug in classless_bottom_slugs_list]
+    
     def filter_out_non_species_parent_gpcr_families(self,parent_gpcr_families,species):
+        """ Filters out parent GPCR families as a list of ProteinFamily objects that belong to a species.
+            parent_gpcr_families: a list of protein.ProteinFamily objects
+            species: protein.Species object
+        """
         new_parent_gpcr_families_slugs_set = set()
         species2 = species
         try:
@@ -84,10 +152,11 @@ class Command(BaseBuild):
         initial_step2 = 380 #If alignment fails, please, set this to a lower value
 
 
-        parent_families = self.get_parent_gpcr_families()
+        parent_families = self.get_parent_gpcr_families(exclude_classless_artificial_class=True,include_classless_natural_classes=True)
         human_parent_gpcr_families = self.filter_out_non_human_parent_gpcr_families(parent_families)
         human_species = self.get_human_species()
 
+        ClassRepresentativeSpecies.custom_objects.truncate_table() #custom_objects is a custom manager, see ClassRepresentativeSpecies model definition
         class_representative_species_list = []
         for gpcr_family in human_parent_gpcr_families:
             class_representative_species_list.append(ClassRepresentativeSpecies(protein_family = gpcr_family, species = human_species))

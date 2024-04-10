@@ -536,8 +536,9 @@ def retrieve_class_similarity_matrix(output_type='html',classless=False,human_on
 
 
     if not classless:
-        class_sim = class_sim.exclude(protein_family1__slug__in=CLASSLESS_PARENT_GPCR_SLUGS)
-        class_sim = class_sim.exclude(protein_family2__slug__in=CLASSLESS_PARENT_GPCR_SLUGS)
+        for slug in list(CLASSLESS_PARENT_GPCR_SLUGS):
+            class_sim = class_sim.exclude(protein_family1__slug__startswith=slug)
+            class_sim = class_sim.exclude(protein_family2__slug__startswith=slug)
 
 
     for class_pair in class_sim.values('id','protein_family1__slug','protein_family1__name',
