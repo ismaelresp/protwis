@@ -3,6 +3,79 @@
 {% load utils %}
 
 {% block addon_css %}
+<style>
+  .header{
+      position:sticky;
+      top: 45px;
+      
+  }
+  .headcol{
+    position: sticky;
+    left: 45px;
+    top: auto;
+  }
+  .header_col{
+    border-top-color: white !important;
+    border-left-color: white !important;
+    border-bottom-color: white !important;
+    background-color: #ffffff !important;
+    vertical-align: middle !important;
+    z-index: 500 !important;
+  }
+  .header_row{
+    border-top-color: white !important;
+    border-left-color: white !important;
+    border-right-color: white !important;
+    background-color: #ffffff !important;
+    vertical-align: middle !important;
+    z-index: 499 !important;
+  }
+  .axis{
+    position:sticky;
+    top: 0 ;
+    border-top-color: white !important;
+    border-left-color: white !important;
+    border-bottom-color: white !important;
+    border-right-color: white !important;
+    background-color: #ffffff !important;
+    vertical-align: middle !important;
+    text-align: center !important;
+  }
+  .axis_h{
+    position:sticky;
+    top: 0 ;
+    left: 50%;
+  }
+  .axis_v{
+    position:sticky;
+    left: 0 ;
+    top: 50%;
+  }
+
+  .rotate {
+    background-color: #ffffff !important;
+    transform: rotate(-90deg);
+  
+  
+    /* Legacy vendor prefixes that you probably don't need... */
+  
+    /* Safari */
+    -webkit-transform: rotate(-90deg);
+  
+    /* Firefox */
+    -moz-transform: rotate(-90deg);
+  
+    /* IE */
+    -ms-transform: rotate(-90deg);
+  
+    /* Opera */
+    -o-transform: rotate(-90deg);
+  
+    /* Internet Explorer */
+    filter: progid:DXImageTransform.Microsoft.BasicImage(rotation=3);
+  
+  }
+</style>
 {% endblock %}
 
 {% block addon_js %}
@@ -47,6 +120,7 @@
           </button>
           <ul class="dropdown-menu">
             {% with tabnum_1=tabnum|add:'-1' %}
+            <li><a href="/alignment/class_similarity_matrix/xlsx?classless={{csv_list|return_item:tabnum_1|return_item:'classless'}}&human_only={{csv_list|return_item:tabnum_1|return_item:'human_only'}}">Excel spreadsheet (xlsx)</a></li>
             <li><a href="/alignment/class_similarity_matrix/csv?classless={{csv_list|return_item:tabnum_1|return_item:'classless'}}&human_only={{csv_list|return_item:tabnum_1|return_item:'human_only'}}">Spreadsheet (csv)</a></li>
             {% endwith%}
           </div>
@@ -54,26 +128,49 @@
         <p class="text-right">
         </p>
         <!-- matrix starts -->
-        <div class="table-responsive">
-            <table id="alignment_class_similarity_matrix_table_{{tabnum}}" class="table table-bordered table-condensed">
-                <tr>
-                    <th></th>
-                    {% for p in m %}
+        {% comment %} <div style="padding-bottom: 10px;"> {% endcomment %}
+        {% with tabnum_1=tabnum|add:'-1' %}
+        {% with human_only=csv_list|return_item:tabnum_1|return_item:'human_only'|isequal:'1' %}
+        {% with classless=csv_list|return_item:tabnum_1|return_item:'classless'|isequal:'1' %}
+        <div style="padding-bottom:10px" class="">
+            <table id="alignment_class_similarity_matrix_table_{{tabnum}}" style="table-layout: fixed{% if human_only and not classless %}; width: 600px;{% endif %}" class="table table-bordered table-condensed table-fixed" >
+              {% comment %}TO DO: make axis title stay sticky in the middle of the screen{% endcomment %}
+              <tr><th rowspan="{{m|length|add:'2'}}" scope="row" class="axis axis_v"><h5 class="rotate">Similarity (%)</h5></th>
+                <th colspan="{{m|length|add:'1'}}" scope="col" class="axis axis_h"><h5>Identity (%)</h5></th></tr>
+              <tr class="header">{% comment %}TO DO: make backwards compatible with browsers that do not support position sticky on <tr> nor <thead>{% endcomment %}
+                    <th style="border-top-color: white; border-left-color: white" class="header header_col header_row" scope="col"></th>
+                    {% for p, v in m.items %}
                     {% with i=forloop.counter %}
-                    <th class="info text-center">{{ i }}</th>
+                    <th style="" class="info text-center header_row" scope="col">{% if not human_only %}<div
+                      data-html="true" data-toggle="popover" data-trigger="click hover" data-placement="below" data-html="true"
+                     data-content="{{ v.species|safe }}">{% endif %}{{ v.name|safe }}{% if not human_only %}</div>{% endif %}</th>
                     {% endwith %}
                     {% endfor %}
                 </tr>
                 {% for p, v in m.items %}
-                <tr>
+                <tr style="height: {% if human_only %}52.133{% else %}73.344{% endif %}px">
                   {% with i=forloop.counter %}
-                    <th class="info">{{ i }}. {{ v.name|safe }}</th>
+                    <th class="info headcol header_col" scope="row" style="">{% if not human_only %}<div
+                      data-html="true" data-toggle="popover" data-trigger="click hover" data-placement="below" data-html="true"
+                     data-content="{{ v.species|safe }}">{% endif %}{{ v.name|safe }}{% if not human_only %}</div>{% endif %}</th>
                     {% for col in v.values %}
                       {% with j=forloop.counter %}
-                      <td class="text-center{% if col.1 != '-' %}{% endif %} {% if i >= j %}color-set1{% elif i <= j %}color-set2{% endif %}">{% if col.1 != '-' %}<div
+                      <td style="text-align: center; vertical-align: middle;" class="text-center{% if col.1 != '-' %}{% endif %} {% if i >= j %}color-set1{% elif i <= j %}color-set2{% endif %}">{% if col.1 != '-' %}<div
                          data-html="true" data-toggle="popover" data-trigger="click hover" data-placement="below" data-html="true"
-                        data-content="
+                        data-content="<b>IUPHAR names:</b><br>
                           {% for pair in col.2 %}
+                            {% if i > j %}
+                              {{ pair.1|safe }} vs {{ pair.0|safe }}
+                            {% else %}
+                              {{ pair.0|safe }} vs {{ pair.1|safe }}
+                            {% endif %}
+                            {% if forloop.counter != col.2|length %}
+                            <br>
+                            {% endif %}
+                          {% endfor %}
+                          <br>
+                          <b>UniProtKB entry names:</b><br>
+                          {% for pair in col.3 %}
                             {% if i > j %}
                               {{ pair.1|safe }} vs {{ pair.0|safe }}
                             {% else %}
@@ -91,8 +188,12 @@
                 {% endfor %}
             </table>
         </div>
-        <!-- matrix alignment ends -->
+        {% endwith%}
+        {% endwith%}
+        {% endwith%}
       </div>
+        <!-- matrix alignment ends -->
+      {% comment %} </div> {% endcomment %}
   </div>
   {% endwith %}
   {% endfor %}

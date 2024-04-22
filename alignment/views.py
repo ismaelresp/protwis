@@ -43,6 +43,8 @@ import xlrd
 import re
 
 strain_re = re.compile(r'\bstrain\b', flags=re.I)
+class_fungal_re = re.compile(r'(\(Ste2-like)(\s+)(fungal)(\s+)(pheromone\))', flags=re.I)
+class_fullname_re = re.compile(r'(Class\s+\w+)(\s+)(\(.*\))', flags=re.I)
 
 # class TargetSelection(AbsTargetSelection):
 #     step = 1
@@ -511,7 +513,7 @@ def retrieve_class_similarity_matrix(output_type='html',classless=False,human_on
             species_name = class_representative_species.species.common_name
             if species_name.lower() != 'human':
                 if strain_re.search(species_name):
-                    species_name = '<i>'+escape(class_representative_species.species.latin_name)+'</i> '+escape(species_name)
+                    species_name = '<i>'+escape(class_representative_species.species.latin_name)+'</i> <br>'+escape(species_name)
                     gpcr_family_name_2_class_representative_species[gpcr_family_name] = species_name
                 else:
                     species_name = class_representative_species.species.latin_name
@@ -563,6 +565,16 @@ def retrieve_class_similarity_matrix(output_type='html',classless=False,human_on
             ident_protein2_name = Protein(name=class_pair['ident_protein2__'+name_type]).short()
             similar_protein1_name = Protein(name=class_pair['similar_protein1__'+name_type]).short()
             similar_protein2_name = Protein(name=class_pair['similar_protein2__'+name_type]).short()
+            name_type = 'entry_name'
+            ident_protein1_entry_name = class_pair['ident_protein1__'+name_type]
+            ident_protein2_entry_name = class_pair['ident_protein2__'+name_type]
+            similar_protein1_entry_name = class_pair['similar_protein1__'+name_type]
+            similar_protein2_entry_name = class_pair['similar_protein2__'+name_type]
+            cross_class_sim['identity_gpcr_pair_entry_name'] = (ident_protein1_entry_name,ident_protein2_entry_name)
+            cross_class_sim['identity_gpcr_pair_w_entry_name'] = []
+            cross_class_sim['similarity_gpcr_pair'] = (similar_protein1_name,similar_protein2_name)
+            cross_class_sim['similarity_gpcr_pair_entry_name'] = (similar_protein1_entry_name,similar_protein2_entry_name)
+            cross_class_sim['similarity_gpcr_pair_w_entry_name'] = []
         else:
             name_type = 'entry_name'
             ident_protein1_name = class_pair['ident_protein1__'+name_type]
@@ -574,21 +586,27 @@ def retrieve_class_similarity_matrix(output_type='html',classless=False,human_on
         cross_class_sim['similarity_gpcr_pair'] = (similar_protein1_name,similar_protein2_name)
         cross_class_sim['similarity_gpcr_pair_w'] = []
 
+
         if class_pair['id'] in class_similarity_id_2_ties:
             for tie in class_similarity_id_2_ties[class_pair['id']]:
+                if tie['type'] == ClassSimilarityType.IDENTITY:
+                    type = 'identity'
+                elif tie['type'] == ClassSimilarityType.SIMILARITY:
+                    type = 'similarity'
+                
                 if output_type == 'html':
                     name_type = 'name'
                     protein1 = Protein(name=tie['protein1__'+name_type]).short()
                     protein2 = Protein(name=tie['protein2__'+name_type]).short()
+                    name_type = 'entry_name'
+                    protein1_entry_name= tie['protein1__'+name_type]
+                    protein2_entry_name = tie['protein2__'+name_type]
+                    cross_class_sim[type+'_gpcr_pair_w_entry_name'].append((protein1_entry_name,protein2_entry_name))
                 else:
                     name_type = 'entry_name'
                     protein1 = tie['protein1__'+name_type]
                     protein2 = tie['protein2__'+name_type]
 
-                if tie['type'] == ClassSimilarityType.IDENTITY:
-                    type = 'identity'
-                elif tie['type'] == ClassSimilarityType.SIMILARITY:
-                    type = 'similarity'
                 cross_class_sim[type+'_gpcr_pair_w'].append((protein1,protein2))
 
     selected_parent_gpcr_families_names1 = OrderedDict()
@@ -626,13 +644,24 @@ def retrieve_class_similarity_matrix(output_type='html',classless=False,human_on
             pairsw = sim[type+'_gpcr_pair_w']
             if len(pairsw) > 0:
                 pairs += pairsw
-            row.append([str(sim[type]),str(sim[type]//10),pairs])
+            if output_type == 'html':
+                pairs_entry_name = [sim[type+'_gpcr_pair_entry_name']]
+                pairsw_entry_name = sim[type+'_gpcr_pair_w_entry_name']
+                if len(pairsw_entry_name) > 0:
+                    pairs_entry_name += pairsw_entry_name
+                row.append([str(sim[type]),str(sim[type]//10),pairs,pairs_entry_name])
+                species_name = gpcr_family_name_2_class_representative_species[key] 
+            else:
+                row.append([str(sim[type]),str(sim[type]//10),pairs])
             j += 1
+        
+        name = key
         if output_type == 'html':
-            name = key+' ('+gpcr_family_name_2_class_representative_species[key]+')'
+            name = class_fullname_re.sub(r'\1<br>\3', name)
+            name = class_fungal_re.sub(r'\1<br>\3<br>\5', name)
+            cross_class_similarity_matrix[key] = {'name':name,'values':row, 'species':species_name}
         else:
-            name = key
-        cross_class_similarity_matrix[key] = {'name':name,'values':row}
+            cross_class_similarity_matrix[key] = {'name':name,'values':row}
         i += 1 
     return (cross_class_similarity_matrix,selected_parent_gpcr_families_names)
 
@@ -646,12 +675,34 @@ def render_class_similarity_matrix(request):
 
     list_tmp = [r_human_only_without_classless,r_human_only_with_classless,r_all_without_classless,r_all_with_classless]
 
-    h_list = ['Human only', 'Human only (including Classless)','All','All (including Classless)']
+    h_list = ['Human only', 'Human only (including Classless)','All (including non-human)','All (including non-human & Classless)']
     csv_list = [{'classless': '0','human_only':'1'},{'classless': '1','human_only':'1'},{'classless': '0','human_only':'0'},{'classless': '1','human_only':'0'}]
 
     return render(request, 'class_similarity/matrix.html', {'csv_list':csv_list,'h_list': h_list, 'p_list': [r[1] for r in list_tmp],'m_list': [r[0] for r in list_tmp]})
 
 def render_class_similarity_csv_matrix(request):
+    classless = True
+    human_only = False
+    try:
+        classless_g = int(request.GET.get('classless', 1))
+        if classless_g == 0:
+            classless = False
+    except ValueError as e:
+        pass
+    try:
+        human_only_g = int(request.GET.get('human_only', 0))
+        if abs(human_only_g) > 0:
+            human_only = True
+    except ValueError as e:
+        pass
+
+    r = retrieve_class_similarity_matrix(output_type='csv',classless=classless,human_only=human_only)
+
+    response = render(request, 'class_similarity/matrix_csv.html', {'p': r[1],'m': r[0]})
+    response['Content-Disposition'] = "attachment; filename=" + site_title(request)["site_title"] + "_similaritymatrix.csv"
+    return response
+
+def render_class_similarity_xlsx_matrix(request):
     classless = True
     human_only = False
     try:

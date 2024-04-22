@@ -9,4 +9,9 @@ def return_item(l, i):
         return l[i]
     except:
         return None
+    
+@register.filter
+def isequal(l, i):
+    return l == i 
+
         
