@@ -40,6 +40,7 @@ import json
 import numpy as np
 import os
 import xlsxwriter
+from xlsxwriter.utility import xl_range_abs
 import xlrd
 import re
 
@@ -727,53 +728,85 @@ def render_class_similarity_xlsx_matrix(request):
     xlsx_output = BytesIO()
     
     workbook = xlsxwriter.Workbook(xlsx_output, {'in_memory': True})
+
+    axis = True
+
+    v_axis_row = 1    #starting row index of vertical axis
+    v_axis_col = 0    #column index of identity axis
+    h_axis_row = 0    #row index of horitzontal axis
+    h_axis_col = 1    #starting column index of indentity axis
+    row_header_row = v_axis_row + 1    #starting row index of the row header
+    row_header_col = v_axis_col + 1    #column index of the row header
+    col_header_row = h_axis_row + 1    #starting column index of the column header
+    col_header_col = h_axis_col + 1    #row index of the column header
+    if not axis:
+        row_header_row = 1    #starting row index of the row header
+        row_header_col = 0    #column index of the row header
+        col_header_row = 0    #starting column index of the column header
+        col_header_col = 1    #row index of the column header
     
+    
+    first_data_row = row_header_row    #first data cell row index
+    first_data_col = col_header_col    #first data cell column index
+
+    n_header = len(m.keys())
+
+    last_data_row = n_header - 1 + first_data_row    #last data cell row index
+    last_data_col = n_header - 1 + first_data_col    #last data cell column index
+
+    #format
+
     table_headers = [v['name'] for p, v in m.items()]
     worksheet1 = workbook.add_worksheet('Values')
     worksheet2 = workbook.add_worksheet('Receptors')
 
-    table_headers_format = workbook.add_format()
-    table_axis_format = workbook.add_format()
-    table_row_axis_format = workbook.add_format()
-    table_headers_numbers_format = workbook.add_format()
-    numbers_format = workbook.add_format()
-    cell_format = workbook.add_format()
+    table_headers_format = workbook.add_format()            #row and column headers format
+    table_h_axis_format = workbook.add_format()             #horitzontal axis format
+    table_v_axis_format = workbook.add_format()             #vertical axis format
+    table_headers_numbers_format = workbook.add_format()    #row and column headers format for cells containing numeric data
+    numbers_format = workbook.add_format()                  #data cell format for cells containing numeric data                                        
+    cell_format = workbook.add_format()                     #data cell format for cells containing non-numeric data 
 
     table_headers_format.set_bold(True)
     table_headers_numbers_format.set_bold(True)
-    table_axis_format.set_bold(True)
-    table_row_axis_format.set_bold(True)
+    table_h_axis_format.set_bold(True)
+    table_v_axis_format.set_bold(True)
+
     table_headers_format.set_align('vcenter')
     table_headers_numbers_format.set_align('vcenter')
-    table_axis_format.set_align('vcenter')
-    table_row_axis_format.set_align('vcenter')
+    table_h_axis_format.set_align('vcenter')
+    table_v_axis_format.set_align('vcenter')
     numbers_format.set_align('vcenter')
     cell_format.set_align('vcenter')
+
     table_headers_numbers_format.set_align('center')
-    table_axis_format.set_align('center')
-    table_row_axis_format.set_align('center')
+    table_h_axis_format.set_align('center')
+    table_v_axis_format.set_align('center')
     numbers_format.set_align('center')
+
     numbers_format.set_border(1)
     numbers_format.set_border_color('#DDDDDD')
-    table_row_axis_format.set_rotation(90)
+    table_v_axis_format.set_rotation(90)
     table_headers_format.set_text_wrap()
     table_headers_numbers_format.set_text_wrap()
 
+    #axis titles
 
-    n_header = len(m.keys())
+    if axis:
+            worksheet1.merge_range(h_axis_row , h_axis_col, h_axis_row, last_data_col, 'Identity (%)',table_h_axis_format)
+            worksheet2.merge_range(h_axis_row , h_axis_col, h_axis_row, last_data_col, 'Identity',table_h_axis_format)
+    if axis:
+            worksheet1.merge_range(v_axis_row , v_axis_col, last_data_row, v_axis_col, 'Similarity (%)',table_v_axis_format)
+            worksheet2.merge_range(v_axis_row , v_axis_col, last_data_row, v_axis_col, 'Similarity',table_v_axis_format)
 
-    worksheet1.merge_range(0, 1, 0, n_header + 1, 'Indentity (%)',table_axis_format)
-    worksheet1.merge_range(1, 0, n_header + 1, 0, 'Similarity (%)',table_row_axis_format)
-    worksheet2.merge_range(0, 1, 0, n_header + 1, 'Indentity',table_axis_format)
-    worksheet2.merge_range(1, 0, n_header + 1, 0, 'Similarity',table_row_axis_format)
+    #column header
+    worksheet1.write_row(col_header_row , col_header_col, table_headers, table_headers_numbers_format)
+    worksheet2.write_row(col_header_row, col_header_col, table_headers, table_headers_format)
 
-    worksheet1.write_row(1, 2, table_headers, table_headers_numbers_format)
-    worksheet2.write_row(1, 2, table_headers, table_headers_format)
-
-    row = 2
+    row = first_data_row
     for p, v in m.items():
-        worksheet1.write(row,1,v['name'],table_headers_format)
-        col = 2
+        worksheet1.write(row,row_header_col,v['name'],table_headers_numbers_format)
+        col = first_data_col 
         for v_col in v['values']:
             cell_value = v_col[0]
             if cell_value  != '-':
@@ -783,10 +816,10 @@ def render_class_similarity_xlsx_matrix(request):
         row += 1
 
 
-    row = 2
+    row = first_data_row
     for p, v in m.items():
-        worksheet2.write(row,1,v['name'],table_headers_format)
-        col = 2
+        worksheet2.write(row,row_header_col,v['name'],table_headers_format)
+        col = first_data_col
         for v_col in v['values']:
             cell_value = ''
             for counter, pair in enumerate(v_col[2]):
@@ -807,12 +840,42 @@ def render_class_similarity_xlsx_matrix(request):
         worksheet1.autofit()
         worksheet2.autofit()
     except Exception as e:
+        if axis:
+            first_col = v_axis_col
+        else:
+            first_col = row_header_col
+        worksheet2.set_column(first_col, last_data_col, 12)
+        worksheet2.set_column(first_data_col, last_data_col, 81)
         pass
-    worksheet1.set_column(1, n_header + 1,12)
-    for row in range(0,n_header + 2):
+    worksheet1.set_column(0, last_data_col, 12)
+    for row in range(0,last_data_col + 1):
         worksheet1.set_row(row, 50)
     worksheet1.freeze_panes(2, 2)
-    worksheet2.freeze_panes(2, 2) 
+    worksheet2.freeze_panes(2, 2)
+    multi_range_list = []
+    # compute cell multi-range for color scale
+
+    # identity
+    multi_range_list = []
+    for i in range(1,last_data_row - first_data_row + 1):
+        first_row = first_data_row
+        last_row = first_data_row + i - 1 # do not color scale the diagonal
+        first_col = last_col = first_data_col + i
+        multi_range_list.append(xl_range_abs(first_row,first_col,last_row,last_col))
+    worksheet1.conditional_format(multi_range_list[0],
+                                {'type': '2_color_scale','min_color': '#FFFFFF',
+                                'max_color': '#999999','multi_range': ' '.join(multi_range_list)})
+
+    # similarity
+    multi_range_list = []
+    for i in range(0,last_data_row - first_data_row + 1):
+        first_row = first_data_row + 1 + i # do not color scale the diagonal
+        last_row = last_data_row
+        first_col = last_col = first_data_col + i
+        multi_range_list.append(xl_range_abs(first_row,first_col,last_row,last_col))
+    worksheet1.conditional_format(multi_range_list[0],
+                                  {'type': '2_color_scale','min_color': '#FFFFFF',
+                                    'max_color': '#999999','multi_range': ' '.join(multi_range_list)})
     workbook.close()
     xlsx_file = File(xlsx_output)
     xlsx_file_size = xlsx_file.size
