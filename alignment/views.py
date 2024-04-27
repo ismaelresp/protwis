@@ -6,6 +6,7 @@ from django.db.models import Case, When
 from django.core.cache import cache
 from django.core.cache import caches
 from django.utils.html import escape
+from django.core.files.base import File
 
 try:
     cache_alignment = caches['alignments']
@@ -561,10 +562,10 @@ def retrieve_class_similarity_matrix(output_type='html',classless=False,human_on
         cross_class_sim['similarity'] = class_pair['similarity']
         if output_type == 'html':
             name_type = 'name'
-            ident_protein1_name = Protein(name=class_pair['ident_protein1__'+name_type]).short()
-            ident_protein2_name = Protein(name=class_pair['ident_protein2__'+name_type]).short()
-            similar_protein1_name = Protein(name=class_pair['similar_protein1__'+name_type]).short()
-            similar_protein2_name = Protein(name=class_pair['similar_protein2__'+name_type]).short()
+            ident_protein1_name = Protein(name=class_pair['ident_protein1__'+name_type]).short().replace('<i>','').replace('</i>','')
+            ident_protein2_name = Protein(name=class_pair['ident_protein2__'+name_type]).short().replace('<i>','').replace('</i>','')
+            similar_protein1_name = Protein(name=class_pair['similar_protein1__'+name_type]).short().replace('<i>','').replace('</i>','')
+            similar_protein2_name = Protein(name=class_pair['similar_protein2__'+name_type]).short().replace('<i>','').replace('</i>','')
             name_type = 'entry_name'
             ident_protein1_entry_name = class_pair['ident_protein1__'+name_type]
             ident_protein2_entry_name = class_pair['ident_protein2__'+name_type]
@@ -596,8 +597,8 @@ def retrieve_class_similarity_matrix(output_type='html',classless=False,human_on
                 
                 if output_type == 'html':
                     name_type = 'name'
-                    protein1 = Protein(name=tie['protein1__'+name_type]).short()
-                    protein2 = Protein(name=tie['protein2__'+name_type]).short()
+                    protein1 = Protein(name=tie['protein1__'+name_type]).short().replace('<i>','').replace('</i>','')
+                    protein2 = Protein(name=tie['protein2__'+name_type]).short().replace('<i>','').replace('</i>','')
                     name_type = 'entry_name'
                     protein1_entry_name= tie['protein1__'+name_type]
                     protein2_entry_name = tie['protein2__'+name_type]
@@ -655,7 +656,7 @@ def retrieve_class_similarity_matrix(output_type='html',classless=False,human_on
                 row.append([str(sim[type]),str(sim[type]//10),pairs])
             j += 1
         
-        name = key
+        name = key.replace('<i>','').replace('</i>','')
         if output_type == 'html':
             name = class_fullname_re.sub(r'\1<br>\3', name)
             name = class_fungal_re.sub(r'\1<br>\3<br>\5', name)
@@ -680,6 +681,8 @@ def render_class_similarity_matrix(request):
 
     return render(request, 'class_similarity/matrix.html', {'csv_list':csv_list,'h_list': h_list, 'p_list': [r[1] for r in list_tmp],'m_list': [r[0] for r in list_tmp]})
 
+
+
 def render_class_similarity_csv_matrix(request):
     classless = True
     human_only = False
@@ -698,7 +701,7 @@ def render_class_similarity_csv_matrix(request):
 
     r = retrieve_class_similarity_matrix(output_type='csv',classless=classless,human_only=human_only)
 
-    response = render(request, 'class_similarity/matrix_csv.html', {'p': r[1],'m': r[0]})
+    response = render(request, 'class_similarity/matrix_csv.html', {'p': r[1],'m': r[0]}, content_type='text/csv')
     response['Content-Disposition'] = "attachment; filename=" + site_title(request)["site_title"] + "_similaritymatrix.csv"
     return response
 
@@ -719,8 +722,103 @@ def render_class_similarity_xlsx_matrix(request):
         pass
 
     r = retrieve_class_similarity_matrix(output_type='csv',classless=classless,human_only=human_only)
+    m, p = r
 
-    response = render(request, 'class_similarity/matrix_csv.html', {'p': r[1],'m': r[0]})
-    response['Content-Disposition'] = "attachment; filename=" + site_title(request)["site_title"] + "_similaritymatrix.csv"
+    xlsx_output = BytesIO()
+    
+    workbook = xlsxwriter.Workbook(xlsx_output, {'in_memory': True})
+    
+    table_headers = [v['name'] for p, v in m.items()]
+    worksheet1 = workbook.add_worksheet('Values')
+    worksheet2 = workbook.add_worksheet('Receptors')
+
+    table_headers_format = workbook.add_format()
+    table_axis_format = workbook.add_format()
+    table_row_axis_format = workbook.add_format()
+    table_headers_numbers_format = workbook.add_format()
+    numbers_format = workbook.add_format()
+    cell_format = workbook.add_format()
+
+    table_headers_format.set_bold(True)
+    table_headers_numbers_format.set_bold(True)
+    table_axis_format.set_bold(True)
+    table_row_axis_format.set_bold(True)
+    table_headers_format.set_align('vcenter')
+    table_headers_numbers_format.set_align('vcenter')
+    table_axis_format.set_align('vcenter')
+    table_row_axis_format.set_align('vcenter')
+    numbers_format.set_align('vcenter')
+    cell_format.set_align('vcenter')
+    table_headers_numbers_format.set_align('center')
+    table_axis_format.set_align('center')
+    table_row_axis_format.set_align('center')
+    numbers_format.set_align('center')
+    numbers_format.set_border(1)
+    numbers_format.set_border_color('#DDDDDD')
+    table_row_axis_format.set_rotation(90)
+    table_headers_format.set_text_wrap()
+    table_headers_numbers_format.set_text_wrap()
+
+
+    n_header = len(m.keys())
+
+    worksheet1.merge_range(0, 1, 0, n_header + 1, 'Indentity (%)',table_axis_format)
+    worksheet1.merge_range(1, 0, n_header + 1, 0, 'Similarity (%)',table_row_axis_format)
+    worksheet2.merge_range(0, 1, 0, n_header + 1, 'Indentity',table_axis_format)
+    worksheet2.merge_range(1, 0, n_header + 1, 0, 'Similarity',table_row_axis_format)
+
+    worksheet1.write_row(1, 2, table_headers, table_headers_numbers_format)
+    worksheet2.write_row(1, 2, table_headers, table_headers_format)
+
+    row = 2
+    for p, v in m.items():
+        worksheet1.write(row,1,v['name'],table_headers_format)
+        col = 2
+        for v_col in v['values']:
+            cell_value = v_col[0]
+            if cell_value  != '-':
+                cell_value = int(cell_value )
+            worksheet1.write(row,col,cell_value,numbers_format)
+            col += 1
+        row += 1
+
+
+    row = 2
+    for p, v in m.items():
+        worksheet2.write(row,1,v['name'],table_headers_format)
+        col = 2
+        for v_col in v['values']:
+            cell_value = ''
+            for counter, pair in enumerate(v_col[2]):
+                if row > col:
+                    cell_value += pair[1]+' vs '+pair[0]
+                elif row < col:
+                    cell_value += pair[0]+' vs '+pair[1]
+                if counter != len(v_col[2]) - 1:
+                    cell_value += ':'
+            if row == col:
+                cell_value = '-'
+            worksheet2.write(row,col,cell_value,cell_format)
+            col += 1
+        row += 1
+    try:
+        # Requires xlsxwriter > 3.0.8
+
+        worksheet1.autofit()
+        worksheet2.autofit()
+    except Exception as e:
+        pass
+    worksheet1.set_column(1, n_header + 1,12)
+    for row in range(0,n_header + 2):
+        worksheet1.set_row(row, 50)
+    worksheet1.freeze_panes(2, 2)
+    worksheet2.freeze_panes(2, 2) 
+    workbook.close()
+    xlsx_file = File(xlsx_output)
+    xlsx_file_size = xlsx_file.size
+    
+    response = HttpResponse(xlsx_file ,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Length'] = xlsx_file_size
+    response['Content-Disposition'] = "attachment; filename=" + site_title(request)["site_title"] + "_similaritymatrix.xlsx"
     return response
 
