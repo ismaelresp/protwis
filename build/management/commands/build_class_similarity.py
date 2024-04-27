@@ -14,6 +14,7 @@ import sys
 import logging
 
 from datetime import datetime, date
+import time
 
 
 
@@ -150,7 +151,7 @@ class Command(BaseBuild):
     def handle(self, *args, **options):
         initial_step1 = 380 #If alignment fails, please, set this to a lower value
         initial_step2 = 380 #If alignment fails, please, set this to a lower value
-
+        start_time = time.time()
 
         parent_families = self.get_parent_gpcr_families(exclude_classless_artificial_class=True,include_classless_natural_classes=True)
         human_parent_gpcr_families = self.filter_out_non_human_parent_gpcr_families(parent_families)
@@ -461,7 +462,11 @@ class Command(BaseBuild):
                         protein1,protein2 = protein_pair
                         class_similarity_ties_list.append(ClassSimilarityTie(class_similarity=class_similarity,protein1=protein1,protein2=protein2,type=ClassSimilarityType.__dict__[type.upper()]))
         ClassSimilarityTie.objects.bulk_create(class_similarity_ties_list)                
-        if options['verbose']: print('Done.')
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        if options['verbose']:
+            print('Execution time:', elapsed_time, 'seconds')
+            print('Done.')
 
      
 
