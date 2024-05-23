@@ -1071,6 +1071,8 @@ class AbsSegmentSelection(TemplateView):
     except Exception as e:
         pass
 
+    
+
     ss = ProteinSegment.objects.filter(partial=False, proteinfamily='GPCR').exclude(name__startswith='Fungal').exclude(name__startswith='ECD').prefetch_related('generic_numbers')
     ss_cats = ss.values_list('category').order_by('category').distinct('category')
     action = 'expand'

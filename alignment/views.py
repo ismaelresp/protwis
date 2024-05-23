@@ -525,7 +525,7 @@ def retrieve_class_similarity_matrix(output_type='html',classless=False,human_on
 
     ties_list = ClassSimilarityTie.objects.all().select_related('protein1','protein2').values('class_similarity_id',
                                                                     'protein1__entry_name','protein2__entry_name',
-                                                                    'protein1__name','protein2__name','type')
+                                                                    'protein1__name','protein2__name','type').order_by('protein1__name','protein2__name')
 
     class_similarity_id_2_ties = {}
     for tie in ties_list:
@@ -543,15 +543,36 @@ def retrieve_class_similarity_matrix(output_type='html',classless=False,human_on
         for slug in list(CLASSLESS_PARENT_GPCR_SLUGS):
             class_sim = class_sim.exclude(protein_family1__slug__startswith=slug)
             class_sim = class_sim.exclude(protein_family2__slug__startswith=slug)
+    else:
+        # NOT USED: code for getting ClassSimilarity.id for pairs containing a classless GPCR
+        # classless_sim1 = classless_sim2 = class_sim
+        # for i,slug in enumerate(list(CLASSLESS_PARENT_GPCR_SLUGS)):
+        #     classless_sim1 = classless_sim1.filter(protein_family1__slug__startswith=slug)
+        #     classless_sim2 = classless_sim2.filter(protein_family2__slug__startswith=slug)
+        #     if i == 0:
+        #         classless_sim = classless_sim1 | classless_sim2
+        #     else:
+        #         classless_sim = classless_sim | classless_sim1 | classless_sim2
+            
+        # classless_sim_ids = set(classless_sim.values_list('id',flat=True))
+        ProteinFamily.objects.filter()
+        for i,slug in enumerate(list(CLASSLESS_PARENT_GPCR_SLUGS)):
+            protein_family_0 = ProteinFamily.objects.filter(slug__startswith=slug)
+            if i == 0:
+                protein_family = protein_family_0
+            else:
+                protein_family = protein_family | protein_family_0
+        classless_protein_family_names = set(protein_family .values_list('name',flat=True))
 
-
-    for class_pair in class_sim.values('id','protein_family1__slug','protein_family1__name',
+    class_pairs = class_sim.values('id','protein_family1__slug','protein_family1__name',
                                                                    'protein_family2__slug','protein_family2__name',
                                                                     'similar_protein1__entry_name','similar_protein2__entry_name',
                                                                     'similar_protein1__name','similar_protein2__name',
                                                                     'ident_protein1__entry_name','ident_protein2__entry_name',
                                                                     'ident_protein1__name','ident_protein2__name','identity','similarity')\
-                                                                    .order_by('protein_family1__slug','protein_family2__slug'):
+                                                                    .order_by('protein_family1__name','protein_family2__name')
+
+    for class_pair in class_pairs:
         gpcr_class1_name = class_pair['protein_family1__name']
         gpcr_class2_name = class_pair['protein_family2__name']
         if gpcr_class1_name not in cross_class_similarities:
@@ -620,7 +641,21 @@ def retrieve_class_similarity_matrix(output_type='html',classless=False,human_on
     for key in selected_parent_gpcr_families_names2:
         selected_parent_gpcr_families_names1[key] = None
 
-    selected_parent_gpcr_families_names = selected_parent_gpcr_families_names1.keys()
+    selected_parent_gpcr_families_names = list(selected_parent_gpcr_families_names1.keys())
+    if classless:
+        selected_p_gpcr_families_names1 = [name for name in selected_parent_gpcr_families_names if name not in classless_protein_family_names]
+        selected_p_gpcr_families_names1.sort()
+        selected_p_gpcr_families_names2 = [name for name in selected_parent_gpcr_families_names if name in classless_protein_family_names]
+        selected_p_gpcr_families_names2.sort()
+        selected_parent_gpcr_families_names = selected_p_gpcr_families_names1 + selected_p_gpcr_families_names2
+        del selected_p_gpcr_families_names1
+        del selected_p_gpcr_families_names2
+        # print('hello')
+        # print(selected_parent_gpcr_families_names)
+    else:
+        selected_parent_gpcr_families_names.sort()
+
+
     
     cross_class_similarity_matrix = OrderedDict()
     i = 0
@@ -635,20 +670,32 @@ def retrieve_class_similarity_matrix(output_type='html',classless=False,human_on
                 type = 'similarity'
             else:
                 type = 'identity'
+            
             if key in cross_class_similarities:
                 if key2 in cross_class_similarities[key]:
                     sim = cross_class_similarities[key][key2]
+                    invert_pairs = False
                 else:
                     sim = cross_class_similarities[key2][key]
+                    invert_pairs = True
             else:
                 sim = cross_class_similarities[key2][key]
-            pairs = [sim[type+'_gpcr_pair']]
-            pairsw = sim[type+'_gpcr_pair_w']
+                invert_pairs = True
+            if invert_pairs:
+                pairs = [(sim[type+'_gpcr_pair'][1],sim[type+'_gpcr_pair'][0])]
+                pairsw = [(p[1],p[0]) for p in sim[type+'_gpcr_pair_w']]
+            else:
+                pairs = [sim[type+'_gpcr_pair']]
+                pairsw = sim[type+'_gpcr_pair_w']
             if len(pairsw) > 0:
                 pairs += pairsw
             if output_type == 'html':
-                pairs_entry_name = [sim[type+'_gpcr_pair_entry_name']]
-                pairsw_entry_name = sim[type+'_gpcr_pair_w_entry_name']
+                if invert_pairs:
+                    pairs_entry_name = [(sim[type+'_gpcr_pair_entry_name'][1],sim[type+'_gpcr_pair_entry_name'][0])]
+                    pairsw_entry_name = [(p[1],p[0]) for p in sim[type+'_gpcr_pair_w_entry_name']]
+                else:
+                    pairs_entry_name = [sim[type+'_gpcr_pair_entry_name']]
+                    pairsw_entry_name = sim[type+'_gpcr_pair_w_entry_name']    
                 if len(pairsw_entry_name) > 0:
                     pairs_entry_name += pairsw_entry_name
                 row.append([str(sim[type]),str(sim[type]//10),pairs,pairs_entry_name])
@@ -660,7 +707,7 @@ def retrieve_class_similarity_matrix(output_type='html',classless=False,human_on
         name = key.replace('<i>','').replace('</i>','')
         if output_type == 'html':
             name = class_fullname_re.sub(r'\1<br>\3', name)
-            name = class_fungal_re.sub(r'\1<br>\3<br>\5', name)
+            name = class_fungal_re.sub(r'(Ste2 \3<br>\5', name)
             cross_class_similarity_matrix[key] = {'name':name,'values':row, 'species':species_name}
         else:
             cross_class_similarity_matrix[key] = {'name':name,'values':row}
@@ -823,10 +870,7 @@ def render_class_similarity_xlsx_matrix(request):
         for v_col in v['values']:
             cell_value = ''
             for counter, pair in enumerate(v_col[2]):
-                if row > col:
-                    cell_value += pair[1]+' vs '+pair[0]
-                elif row < col:
-                    cell_value += pair[0]+' vs '+pair[1]
+                cell_value += pair[0]+' vs '+pair[1]
                 if counter != len(v_col[2]) - 1:
                     cell_value += ':'
             if row == col:
