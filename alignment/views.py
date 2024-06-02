@@ -46,7 +46,8 @@ import re
 
 strain_re = re.compile(r'\bstrain\b', flags=re.I)
 class_fungal_re = re.compile(r'(\(Ste2-like)(\s+)(fungal)(\s+)(pheromone\))', flags=re.I)
-class_fullname_re = re.compile(r'(Class\s+\w+)(\s+)(\(.*\))', flags=re.I)
+class_fullname_re = re.compile(r'^(Class\s+\w+)(\s+)(\(.*\))', flags=re.I)
+class_prefix_re = re.compile(r'^(Class)\s+', flags=re.I)
 
 # class TargetSelection(AbsTargetSelection):
 #     step = 1
@@ -650,18 +651,19 @@ def retrieve_class_similarity_matrix(output_type='html',classless=False,human_on
         selected_parent_gpcr_families_names = selected_p_gpcr_families_names1 + selected_p_gpcr_families_names2
         del selected_p_gpcr_families_names1
         del selected_p_gpcr_families_names2
-        # print('hello')
-        # print(selected_parent_gpcr_families_names)
+
     else:
         selected_parent_gpcr_families_names.sort()
-
-
     
     cross_class_similarity_matrix = OrderedDict()
+    if output_type=='xls' or output_type=='xlsx':
+        cross_class_similarities_xls = OrderedDict()
     i = 0
     for key in selected_parent_gpcr_families_names:
         row = []
         j = 0
+        if output_type=='xls' or output_type=='xlsx':
+            cross_class_similarities_xls[key] = OrderedDict()
         for key2 in selected_parent_gpcr_families_names:
             if key == key2:
                 row.append(['-','-',''])
@@ -698,10 +700,30 @@ def retrieve_class_similarity_matrix(output_type='html',classless=False,human_on
                     pairsw_entry_name = sim[type+'_gpcr_pair_w_entry_name']    
                 if len(pairsw_entry_name) > 0:
                     pairs_entry_name += pairsw_entry_name
+                pairs_entry_name_order_list = [(i,p) for i,p in enumerate(pairs_entry_name)]
+                pairs_entry_name_order_list.sort(key=lambda p : p[1][1])
+                pairs_entry_name_order_list.sort(key=lambda p : p[1][0])
+                pairs_entry_name = [e[1] for e in pairs_entry_name_order_list]
+                pairs = [pairs[e[0]] for e in pairs_entry_name_order_list]
                 row.append([str(sim[type]),str(sim[type]//10),pairs,pairs_entry_name])
                 species_name = gpcr_family_name_2_class_representative_species[key] 
             else:
+                pairs.sort(key=lambda p : p[1])
+                pairs.sort(key=lambda p : p[0])
                 row.append([str(sim[type]),str(sim[type]//10),pairs])
+            if output_type=='xls' or output_type=='xlsx':
+                sim2 = deepcopy(sim)
+                if type == 'identity':
+                    rec12 = pairs
+                elif type == 'similarity':
+                    rec12 = [sim2[type+'_gpcr_pair']] + sim2[type+'_gpcr_pair_w']
+                    rec12.sort(key=lambda p : p[1])
+                    rec12.sort(key=lambda p : p[0])
+                sim2[type+'_gpcr_pair'] = rec12[0]
+                if len(rec12) > 1:
+                    sim2[type+'_gpcr_pair_w'] = rec12[1:]
+                cross_class_similarities_xls[key][key2] = sim2
+
             j += 1
         
         name = key.replace('<i>','').replace('</i>','')
@@ -711,8 +733,11 @@ def retrieve_class_similarity_matrix(output_type='html',classless=False,human_on
             cross_class_similarity_matrix[key] = {'name':name,'values':row, 'species':species_name}
         else:
             cross_class_similarity_matrix[key] = {'name':name,'values':row}
-        i += 1 
-    return (cross_class_similarity_matrix,selected_parent_gpcr_families_names)
+        i += 1
+    if output_type=='xls' or output_type=='xlsx':
+        return (cross_class_similarity_matrix,selected_parent_gpcr_families_names,cross_class_similarities_xls)
+    else:
+        return (cross_class_similarity_matrix,selected_parent_gpcr_families_names)
 
 render_class_similarity_csv_matrix_urls = ['human_only_without_classless', 'human_only_with_classless','all_without_classless','all_with_classless']
 
@@ -769,8 +794,8 @@ def render_class_similarity_xlsx_matrix(request):
     except ValueError as e:
         pass
 
-    r = retrieve_class_similarity_matrix(output_type='csv',classless=classless,human_only=human_only)
-    m, p = r
+    r = retrieve_class_similarity_matrix(output_type='xlsx',classless=classless,human_only=human_only)
+    m, selected_parent_gpcr_families_names, cross_class_similarities = r
 
     xlsx_output = BytesIO()
     
@@ -804,20 +829,27 @@ def render_class_similarity_xlsx_matrix(request):
     #format
 
     table_headers = [v['name'] for p, v in m.items()]
-    worksheet1 = workbook.add_worksheet('Values')
-    worksheet2 = workbook.add_worksheet('Receptors')
+    worksheet_info = workbook.add_worksheet('Info')
+    worksheet_matrix = workbook.add_worksheet('Matrix')
+    worksheet_matrix_p = workbook.add_worksheet('Matrix_pairs')
+    worksheet_pairs_id = workbook.add_worksheet('Pairs_Id')
+    worksheet_pairs_sim = workbook.add_worksheet('Pairs_Sim')
 
     table_headers_format = workbook.add_format()            #row and column headers format
     table_h_axis_format = workbook.add_format()             #horitzontal axis format
     table_v_axis_format = workbook.add_format()             #vertical axis format
     table_headers_numbers_format = workbook.add_format()    #row and column headers format for cells containing numeric data
     numbers_format = workbook.add_format()                  #data cell format for cells containing numeric data                                        
-    cell_format = workbook.add_format()                     #data cell format for cells containing non-numeric data 
+    cell_format = workbook.add_format()                     #data cell format for cells containing non-numeric data
+    pairs_header_format = workbook.add_format()             #receptor pairs column headers format
+    info_header_format = workbook.add_format()              #info column headers format
 
     table_headers_format.set_bold(True)
     table_headers_numbers_format.set_bold(True)
     table_h_axis_format.set_bold(True)
     table_v_axis_format.set_bold(True)
+    pairs_header_format.set_bold(True)
+    info_header_format.set_bold(True)
 
     table_headers_format.set_align('vcenter')
     table_headers_numbers_format.set_align('vcenter')
@@ -837,35 +869,54 @@ def render_class_similarity_xlsx_matrix(request):
     table_headers_format.set_text_wrap()
     table_headers_numbers_format.set_text_wrap()
 
+    worksheet_pairs_id.freeze_panes(1, 0)
+    worksheet_pairs_sim.freeze_panes(1, 0)
+
+    #Info
+    worksheet_info.write_row(0 , 0, ['Tabs', 'Description'], info_header_format)
+    worksheet_info.write_row(1 , 0, ['Matrix', 'Cross-class GPCR similarity matrix, where cross-class similarity/identity is defined as the highest similarity/identity among each pair of receptors.'])
+    worksheet_info.write_row(2 , 0, ['Matrix_Pairs', 'Highest cross-class GPCR similarity/identity pairs of receptors matrix.'])
+    worksheet_info.write_row(3 , 0, ['Pairs_Id', 'List of cross-class identity of each pair of receptors with the highest identity.'])
+    worksheet_info.write_row(4 , 0, ['Pairs_Sim', 'List of cross-class similarity of each pair of receptors with the highest similarity.'])
+
+
+    try:
+        # Requires xlsxwriter > 3.0.8
+        worksheet_info.autofit()
+    except Exception as e:
+        worksheet_info.set_column(0, 0, 10)
+        worksheet_info.set_column(1, 1, 110)
+        pass
+
     #axis titles
 
     if axis:
-            worksheet1.merge_range(h_axis_row , h_axis_col, h_axis_row, last_data_col, 'Identity (%)',table_h_axis_format)
-            worksheet2.merge_range(h_axis_row , h_axis_col, h_axis_row, last_data_col, 'Identity',table_h_axis_format)
+            worksheet_matrix.merge_range(h_axis_row , h_axis_col, h_axis_row, last_data_col, 'Identity (%)',table_h_axis_format)
+            worksheet_matrix_p.merge_range(h_axis_row , h_axis_col, h_axis_row, last_data_col, 'Identity',table_h_axis_format)
     if axis:
-            worksheet1.merge_range(v_axis_row , v_axis_col, last_data_row, v_axis_col, 'Similarity (%)',table_v_axis_format)
-            worksheet2.merge_range(v_axis_row , v_axis_col, last_data_row, v_axis_col, 'Similarity',table_v_axis_format)
+            worksheet_matrix.merge_range(v_axis_row , v_axis_col, last_data_row, v_axis_col, 'Similarity (%)',table_v_axis_format)
+            worksheet_matrix_p.merge_range(v_axis_row , v_axis_col, last_data_row, v_axis_col, 'Similarity',table_v_axis_format)
 
     #column header
-    worksheet1.write_row(col_header_row , col_header_col, table_headers, table_headers_numbers_format)
-    worksheet2.write_row(col_header_row, col_header_col, table_headers, table_headers_format)
+    worksheet_matrix.write_row(col_header_row , col_header_col, table_headers, table_headers_numbers_format)
+    worksheet_matrix_p.write_row(col_header_row, col_header_col, table_headers, table_headers_format)
 
     row = first_data_row
     for p, v in m.items():
-        worksheet1.write(row,row_header_col,v['name'],table_headers_numbers_format)
+        worksheet_matrix.write(row,row_header_col,v['name'],table_headers_numbers_format)
         col = first_data_col 
         for v_col in v['values']:
             cell_value = v_col[0]
             if cell_value  != '-':
                 cell_value = int(cell_value )
-            worksheet1.write(row,col,cell_value,numbers_format)
+            worksheet_matrix.write(row,col,cell_value,numbers_format)
             col += 1
         row += 1
 
 
     row = first_data_row
     for p, v in m.items():
-        worksheet2.write(row,row_header_col,v['name'],table_headers_format)
+        worksheet_matrix_p.write(row,row_header_col,v['name'],table_headers_format)
         col = first_data_col
         for v_col in v['values']:
             cell_value = ''
@@ -875,27 +926,27 @@ def render_class_similarity_xlsx_matrix(request):
                     cell_value += ':'
             if row == col:
                 cell_value = '-'
-            worksheet2.write(row,col,cell_value,cell_format)
+            worksheet_matrix_p.write(row,col,cell_value,cell_format)
             col += 1
         row += 1
     try:
         # Requires xlsxwriter > 3.0.8
 
-        worksheet1.autofit()
-        worksheet2.autofit()
+        worksheet_matrix.autofit()
+        worksheet_matrix_p.autofit()
     except Exception as e:
         if axis:
             first_col = v_axis_col
         else:
             first_col = row_header_col
-        worksheet2.set_column(first_col, last_data_col, 12)
-        worksheet2.set_column(first_data_col, last_data_col, 81)
+        worksheet_matrix_p.set_column(first_col, last_data_col, 12)
+        worksheet_matrix_p.set_column(first_data_col, last_data_col, 81)
         pass
-    worksheet1.set_column(0, last_data_col, 12)
+    worksheet_matrix.set_column(0, last_data_col, 12)
     for row in range(0,last_data_col + 1):
-        worksheet1.set_row(row, 50)
-    worksheet1.freeze_panes(2, 2)
-    worksheet2.freeze_panes(2, 2)
+        worksheet_matrix.set_row(row, 50)
+    worksheet_matrix.freeze_panes(2, 2)
+    worksheet_matrix_p.freeze_panes(2, 2)
     multi_range_list = []
     # compute cell multi-range for color scale
 
@@ -906,7 +957,7 @@ def render_class_similarity_xlsx_matrix(request):
         last_row = first_data_row + i - 1 # do not color scale the diagonal
         first_col = last_col = first_data_col + i
         multi_range_list.append(xl_range_abs(first_row,first_col,last_row,last_col))
-    worksheet1.conditional_format(multi_range_list[0],
+    worksheet_matrix.conditional_format(multi_range_list[0],
                                 {'type': '2_color_scale','min_color': '#FFFFFF',
                                 'max_color': '#999999','multi_range': ' '.join(multi_range_list)})
 
@@ -917,9 +968,68 @@ def render_class_similarity_xlsx_matrix(request):
         last_row = last_data_row
         first_col = last_col = first_data_col + i
         multi_range_list.append(xl_range_abs(first_row,first_col,last_row,last_col))
-    worksheet1.conditional_format(multi_range_list[0],
+    worksheet_matrix.conditional_format(multi_range_list[0],
                                   {'type': '2_color_scale','min_color': '#FFFFFF',
                                     'max_color': '#999999','multi_range': ' '.join(multi_range_list)})
+    worksheet_matrix_p.write_row(col_header_row, col_header_col, table_headers, table_headers_format)
+
+
+    #Pairs
+    pairs_worksheet_dict_list = [
+        {'worksheet': worksheet_pairs_id,'values_field_header':'Id (%)','type':'identity'},
+        {'worksheet': worksheet_pairs_sim,'values_field_header':'Sim (%)','type':'similarity'}
+    ]
+    worksheet_pairs_headers = ['Class 1','Class 2','Rec 1','Rec 2']
+    for pairs_worksheet_dict in pairs_worksheet_dict_list:
+        worksheet = pairs_worksheet_dict['worksheet']
+        worksheet_headers = worksheet_pairs_headers + [pairs_worksheet_dict['values_field_header']]
+        type = pairs_worksheet_dict['type']
+        worksheet.write_row(0 , 0, worksheet_headers,pairs_header_format)
+        unique_keys_set = set()
+        row = 1
+        for gpcr_class1_name in selected_parent_gpcr_families_names:
+            # NOT USED: retrieve_class_similarity_matrix() returns a cross_class_similarities with reverse combinations of classes
+            # if gpcr_class1_name not in cross_class_similarities:
+            #     continue
+            gpcr_class1_name_d = class_prefix_re.sub(r'',gpcr_class1_name.replace('<i>','').replace('</i>',''))
+            for gpcr_class2_name in selected_parent_gpcr_families_names:
+                if gpcr_class2_name == gpcr_class1_name:
+                    continue
+                # skip duplicated combinations of classes
+                unique_list = [gpcr_class1_name,gpcr_class2_name]
+                unique_list.sort()
+                unique_key = '@'.join(unique_list)
+                if unique_key in unique_keys_set:
+                    continue
+                # NOT USED: retrieve_class_similarity_matrix() returns a cross_class_similarities with reverse combinations of classes
+                # if gpcr_class2_name not in cross_class_similarities[gpcr_class1_name]:
+                #     continue
+
+                gpcr_class2_name_d = class_prefix_re.sub(r'',gpcr_class2_name.replace('<i>','').replace('</i>',''))
+                cross_class_sim = cross_class_similarities[gpcr_class1_name][gpcr_class2_name]
+                
+                value = cross_class_sim[type]
+                rec12 = [cross_class_sim[type+'_gpcr_pair']] + cross_class_sim[type+'_gpcr_pair_w']
+                # NOT USED: already sorted in retrieve_class_similarity_matrix()
+                # rec12.sort(key=lambda p : p[1])
+                # rec12.sort(key=lambda p : p[0])
+                rec1 = ':'.join([p[0] for p in rec12])
+                rec2 = ':'.join([p[1] for p in rec12])
+                worksheet.write_row(row , 0, [gpcr_class1_name_d,gpcr_class2_name_d,rec1,rec2,value])
+                row += 1
+                unique_keys_set.add(unique_key)
+        try:
+            # Requires xlsxwriter > 3.0.8
+
+            worksheet.autofit()
+        except Exception as e:
+            worksheet.set_column(0, 1, 25)
+            worksheet.set_column(2, 3, 40)
+            worksheet.set_column(4, 4, 6)
+            pass
+        
+        
+
     workbook.close()
     xlsx_file = File(xlsx_output)
     xlsx_file_size = xlsx_file.size
