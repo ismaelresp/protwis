@@ -53,7 +53,7 @@ class Command(BaseBuild):
         super(Command, self).add_arguments(parser=parser)
         parser.add_argument('--output',type=str, help="Output file path. Default 'gpcr_cross_class_similarity_data.csv'.", default='gpcr_cross_class_similarity_data.csv', action='store')
         parser.add_argument('--verbose', help='Prints progress in stdout.', default=False, action='store_true')
-        parser.add_argument('--force', help="Overwrites output file. If --output is not used, overwrites the file 'gpcr_cross_class_similarity_data.csv'.", default=False, action='store_true')
+        parser.add_argument('--force', help="Overwrites output file. If --output is not used, overwrites the file 'gpcr_similarity_data.csv'.", default=False, action='store_true')
         parser.add_argument('--limit',type=int, help='Use only any indicated number of GPCRs per class.', default=False, action='store')
 
     def get_parent_gpcr_families(self,exclude_classless_artificial_class=True,include_classless_natural_classes=True):
@@ -180,15 +180,6 @@ class Command(BaseBuild):
 
             gpcr_segments = ProteinSegment.objects.filter(proteinfamily='GPCR')
 
-            proteins = None
-            i = 1
-
-
-
-            step1=int(initial_step1) #If alignment fails, please, set this to a lower value
-            step2=int(initial_step2) #If alignment fails, please, set this to a lower value
-            step_halved = False 
-
 
             human_parent_gpcr_families_protein = {}
             human_parent_gpcr_families_protein_num = {}
@@ -221,7 +212,13 @@ class Command(BaseBuild):
                     selected_parent_gpcr_families_protein_num[gpcr_class] = yeast_non_human_parent_gpcr_families_protein_num[gpcr_class]
 
 
-            for gpcr_class in selected_parent_gpcr_families[:-1]:
+
+            step1=int(initial_step1) #If alignment fails, please, set this to a lower value
+            step2=int(initial_step2) #If alignment fails, please, set this to a lower value
+            step_halved = False 
+
+            unique_keys_set = set()
+            for gpcr_class in selected_parent_gpcr_families:
                 gpcr_class1_name = class_prefix_re.sub(r'',gpcr_class.name.replace('<i>','').replace('</i>',''))
                 while_loop_continue = False
                 while True:
@@ -230,6 +227,8 @@ class Command(BaseBuild):
                             protein_num1 = selected_parent_gpcr_families_protein_num[gpcr_class]
                         else:
                             protein_num1 = options['limit']
+                    else:
+                        protein_num1 = selected_parent_gpcr_families_protein_num[gpcr_class]
                     
                     for clim in range(0,protein_num1,step1):
                         
@@ -238,8 +237,13 @@ class Command(BaseBuild):
                         if options['limit']:
                             gpcr_class_proteins = gpcr_class_proteins[:options['limit']]
                         
-                        for gpcr_class2 in selected_parent_gpcr_families[i:]:
+                        for gpcr_class2 in selected_parent_gpcr_families:
                             gpcr_class2_name = class_prefix_re.sub(r'',gpcr_class2.name.replace('<i>','').replace('</i>',''))
+                            unique_list = [gpcr_class1_name,gpcr_class2_name]
+                            unique_list.sort()
+                            unique_key = '@'.join(unique_list)
+                            if unique_key in unique_keys_set:
+                                continue
                             if options['limit']: 
                                 if selected_parent_gpcr_families_protein_num[gpcr_class2] < options['limit']:
                                     protein_num2 = selected_parent_gpcr_families_protein_num[gpcr_class2]
@@ -256,7 +260,11 @@ class Command(BaseBuild):
 
                                 if options['limit']:
                                     gpcr_class2_proteins = gpcr_class2_proteins[:options['limit']]
-                                proteins = gpcr_class_proteins + gpcr_class2_proteins
+
+                                if gpcr_class1_name == gpcr_class2_name and clim2 == clim and clim+step1 == clim2+step2:
+                                    proteins = gpcr_class_proteins
+                                else:
+                                    proteins = gpcr_class_proteins + gpcr_class2_proteins
 
                                 cs_alignment = Alignment()
                                 cs_alignment.load_proteins(proteins)
@@ -277,7 +285,8 @@ class Command(BaseBuild):
 
                                 for protein1 in gpcr_class_proteins:
                                     for protein2 in gpcr_class2_proteins:
-                                        
+                                        if protein1.entry_name == protein2.entry_name:
+                                            continue
                                         pos_s = entry_name_2_position[protein1.entry_name]
                                         similarity_value = int(cs_alignment.similarity_matrix[protein2.entry_name]['values'][pos_s][0])
                                         pos_i = entry_name_2_position[protein2.entry_name]
@@ -300,7 +309,7 @@ class Command(BaseBuild):
                                 csvfile.flush()
 
                                         
-
+                            unique_keys_set.add(unique_key)
                             if while_loop_continue:
                                 break
                         del proteins
@@ -322,7 +331,6 @@ class Command(BaseBuild):
                         step2=initial_step2
                         step_halved = False
                     del selected_parent_gpcr_families_protein[gpcr_class]
-                    i += 1
                     break    
                 
 
