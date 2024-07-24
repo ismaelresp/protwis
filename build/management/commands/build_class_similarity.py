@@ -1,6 +1,6 @@
 from build.management.commands.base_build import Command as BaseBuild
 
-from django.db.models import F 
+from django.db.models import F,Q
 
 
 from protein.models import Protein, ProteinSegment, ProteinFamily, Species
@@ -174,7 +174,7 @@ class Command(BaseBuild):
         ClassRepresentativeSpecies.objects.bulk_create(class_representative_species_list)
 
 
-        gpcr_segments = ProteinSegment.objects.filter(proteinfamily='GPCR')
+        gpcr_segments = ProteinSegment.objects.filter(Q(proteinfamily='GPCR') & (Q(slug__regex='TM[1-7]') | Q(slug='H8')))
 
         cross_class_similarities = OrderedDict()
         proteins = None
