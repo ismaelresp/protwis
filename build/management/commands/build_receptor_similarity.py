@@ -1,6 +1,6 @@
 from build.management.commands.base_build import Command as BaseBuild
 
-from django.db.models import F 
+from django.db.models import F,Q
 
 
 from protein.models import Protein, ProteinSegment, ProteinFamily, Species
@@ -178,7 +178,7 @@ class Command(BaseBuild):
             yeast_non_human_parent_gpcr_families = [gpcr_family for gpcr_family in yeast_parent_gpcr_families if gpcr_family in yeast_non_human_parent_gpcr_families_set]
             yeast_species = self.get_yeast_species()
 
-            gpcr_segments = ProteinSegment.objects.filter(proteinfamily='GPCR')
+            gpcr_segments = ProteinSegment.objects.filter(Q(proteinfamily='GPCR') & (Q(slug__regex='TM[1-7]') | Q(slug='H8')))
 
 
             human_parent_gpcr_families_protein = {}
