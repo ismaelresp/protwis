@@ -185,7 +185,10 @@ class Command(BaseBuild):
                                                                                                                                       Q(family__slug__istartswith='004') |
                                                                                                                                       Q(family__slug__istartswith='005') |
                                                                                                                                       Q(family__slug__istartswith='006') |
-                                                                                                                                      Q(family__slug__istartswith='007')).order_by('entry_name')
+                                                                                                                                      Q(family__slug__istartswith='007') |
+                                                                                                                                      Q(family__slug__istartswith='008') |
+                                                                                                                                      Q(family__slug__istartswith='009') |
+                                                                                                                                      Q(family__slug__istartswith='010')).order_by('entry_name')
             structs = Structure.objects.filter(annotated=True).exclude(structure_type__slug__startswith='af-').order_by('pdb_code__index')
             all_receptors = list(all_receptors)+[i.protein_conformation.protein for i in structs]
         elif options['c'].upper() not in GPCR_class_codes:
@@ -315,7 +318,7 @@ class Command(BaseBuild):
             structs_in_class = Structure.objects.filter(protein_conformation__protein__parent__family__slug__startswith=rec_class.slug, annotated=True).exclude(structure_type__slug__startswith='af-')
         possible_states = structs_in_class.exclude(protein_conformation__protein__parent=receptor).exclude(state__name='Other').values_list('state__name', flat=True).distinct()
         if len(possible_states)==0:
-            if rec_class.name=='Class T (Taste 2)':
+            if rec_class.name=='Class T2 (Taste 2)':
                 rec_class = ProteinFamily.objects.get(name='Class A (Rhodopsin)')
                 structs_in_class = Structure.objects.filter(protein_conformation__protein__parent__family__slug__startswith=rec_class.slug, annotated=True).exclude(structure_type__slug__startswith='af-')
             possible_states = structs_in_class.exclude(protein_conformation__protein__parent=receptor).exclude(state__name='Other').values_list('state__name', flat=True).distinct()
@@ -839,7 +842,7 @@ class CallHomologyModeling():
                             return 0
                 else:
                     af_path = os.sep.join([self.alphafold_refined_data_dir, Homology_model.main_structure.pdb_code.index+'_refined.pdb'])
-                
+
                 ihm = ImportHomologyModel(Homology_model.reference_protein.parent)
                 ihm.path_to_pdb = af_path
                 p = PDB.PDBParser()
@@ -851,7 +854,7 @@ class CallHomologyModeling():
                     model_signprot = p.get_structure('signprot',  af_path)[0]['B']
                     ihm2 = ImportHomologyModel(signprot, 'Alpha')
                     spaf_reference_dict, spaf_template_dict, spaf_alignment_dict, spaf_main_pdb_array = deepcopy(ihm2.parse_model(model_signprot))
-                    
+
                     for i, j, k, l in zip(spaf_reference_dict, spaf_template_dict, spaf_alignment_dict, spaf_main_pdb_array):
                         af_reference_dict[i] = spaf_reference_dict[i]
                         af_template_dict[j] = spaf_template_dict[j]
@@ -1064,7 +1067,7 @@ class CallHomologyModeling():
                             template_source['G.hgh4'][i] = [None, None]
                             missing_h4.append(['G.hgh4', i])
                         missing_sections.append(missing_h4)
-                        
+
                     ### Shorten ICL3
                     for i in reference_dict:
                         if i.startswith('ICL3'):
@@ -1536,7 +1539,7 @@ class HomologyModeling(object):
             self.prot_conf = ProteinConformation.objects.get(protein=self.reference_protein)
             self.uniprot_id = self.reference_protein.accession
             self.revise_xtal = False
-        class_tree = {'001':'A', '002':'B1', '003':'B2', '004':'C', '005':'D1', '006':'F', '007':'T'}
+        class_tree = {'001':'A', '002':'B1', '003':'B2', '004':'C', '005':'D1', '006':'F', '009':'T'}
         self.class_name = 'Class'+class_tree[Protein.objects.get(entry_name=self.reference_entry_name).family.parent.slug[:3]]
         self.statistics.add_info('uniprot_id',self.uniprot_id)
         self.statistics.add_info('state',self.state)
