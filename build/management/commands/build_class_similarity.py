@@ -26,7 +26,7 @@ hdlr.setFormatter(formatter)
 logger.addHandler(hdlr)
 logger.setLevel(logging.INFO)
 
-from common.definitions import CLASSLESS_PARENT_GPCR_SLUGS
+from protein.models import CLASSLESS_PARENT_GPCR_SLUGS
 
 matrix_header_max_length = 20
 

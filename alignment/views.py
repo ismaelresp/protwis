@@ -28,7 +28,7 @@ from protein.models import Protein, ProteinSegment, ProteinFamily, ProteinSet
 from residue.models import ResidueNumberingScheme, ResiduePositionSet
 from alignment.models import ClassSimilarity, ClassSimilarityTie, ClassSimilarityType, ClassRepresentativeSpecies
 from seqsign.sequence_signature import SequenceSignature, signature_score_excel
-from common.definitions import CLASSLESS_PARENT_GPCR_SLUGS
+from protein.models import CLASSLESS_PARENT_GPCR_SLUGS
 
 from collections import OrderedDict
 from copy import deepcopy
