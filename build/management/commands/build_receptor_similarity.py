@@ -30,7 +30,7 @@ logger.setLevel(logging.INFO)
 
 class_prefix_re = re.compile(r'^(Class)\s+', flags=re.I)
 
-from common.definitions import CLASSLESS_PARENT_GPCR_SLUGS
+from protein.models import CLASSLESS_PARENT_GPCR_SLUGS
 
 FIELDNAMES = ['class1','receptor1_name_short',
                 'receptor1_name','receptor1_entry_name',
