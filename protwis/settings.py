@@ -16,7 +16,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
 
 # Application definition
-INSTALLED_APPS = (
+INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -56,8 +56,9 @@ INSTALLED_APPS = (
     'seqsign',
     'angles',
     'hotspots',
-    'django_rdkit',
-)
+]
+if not DISABLE_DJANGO_RDKIT_APP:
+    INSTALLED_APPS.append('django_rdkit')
 
 MIDDLEWARE = (
     'common.middleware.stats.StatsMiddleware',

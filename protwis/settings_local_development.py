@@ -13,6 +13,11 @@ REFERENCE_POSITIONS = {'TM1': '1x50', 'ICL1': '12x50', 'TM2': '2x50', 'ECL1': '2
     'D1S1': 'D1S1x50', 'D1T1': 'D1T1x50', 'D1S2': 'D1S2x50', 'D1e1': 'D1e1x50'}
 DOCUMENTATION_URL = 'https://docs.gpcrdb.org/'
 
+# Disables django_rdkit/migrations/0001_setup.py 
+# (runs SQL command 'CREATE EXTENSION IF NOT EXISTS rdkit' and tests if the 
+# extensions works).
+DISABLE_DJANGO_RDKIT_APP = False
+
 # Analytics
 GOOGLE_ANALYTICS_KEY = False
 
