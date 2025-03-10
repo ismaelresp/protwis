@@ -74,9 +74,13 @@ class Protein(models.Model):
         residuelist = Residue.objects.filter(protein_conformation__protein__entry_name=str(self)).prefetch_related('protein_segment','display_generic_number','generic_number')
         return DrawHelixBox(residuelist,self.get_protein_class(),str(self))
 
-    def get_snake_plot(self):
+    def get_snake_plot(self, domain=None):
         residuelist = Residue.objects.filter(protein_conformation__protein__entry_name=str(self)).prefetch_related('protein_segment','display_generic_number','generic_number')
-        return DrawSnakePlot(residuelist,self.get_protein_class(),str(self))
+        return DrawSnakePlot(residuelist,self.get_protein_class(),str(self), domain=domain)
+
+    def get_snake_plot_GAIN(self):
+        residuelist = Residue.objects.filter(protein_conformation__protein__entry_name=str(self)).prefetch_related('protein_segment','display_generic_number','generic_number')
+        return DrawSnakePlot(residuelist,self.get_protein_class(),str(self), domain='GAIN')
 
     def get_helical_box_no_buttons(self):
         residuelist = Residue.objects.filter(protein_conformation__protein__entry_name=str(self)).prefetch_related('protein_segment','display_generic_number','generic_number')
@@ -252,6 +256,7 @@ class ProteinSegment(models.Model):
     fully_aligned = models.BooleanField(default=False)
     partial = models.BooleanField(default=False)
     proteinfamily = models.CharField(max_length=20)
+    domain = models.CharField(max_length=20, null=True)
 
     def __str__(self):
         return self.slug
@@ -292,10 +297,14 @@ class ProteinFamily(models.Model):
         ordering = ('id', )
 
 # Remove in the future
-# The next two lines must be after class ProteinFamily.
-from protein.model_func import get_current_classless_parent_gpcr_slugs
-CLASSLESS_PARENT_GPCR_SLUGS = get_current_classless_parent_gpcr_slugs(_BEFORE_NAR2025_CLASSLESS_PARENT_GPCR_SLUGS_DICT,
-                                                                      _AFTER_NAR2025_CLASSLESS_PARENT_GPCR_SLUGS)
+# The next two lines must be after class ProteinFamily
+try:
+  # This usually fails if ProteinFamily table does not exist in DB or "from protein.models import ProteinFamily" fails
+  from protein.model_func import get_current_classless_parent_gpcr_slugs
+  CLASSLESS_PARENT_GPCR_SLUGS = get_current_classless_parent_gpcr_slugs(_BEFORE_NAR2025_CLASSLESS_PARENT_GPCR_SLUGS_DICT,
+                                                                        _AFTER_NAR2025_CLASSLESS_PARENT_GPCR_SLUGS)
+except:
+  CLASSLESS_PARENT_GPCR_SLUGS = _AFTER_NAR2025_CLASSLESS_PARENT_GPCR_SLUGS
 
 class ProteinSequenceType(models.Model):
     slug = models.SlugField(max_length=20, unique=True)
