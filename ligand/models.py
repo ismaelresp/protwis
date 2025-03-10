@@ -30,6 +30,11 @@ class Ligand(models.Model):
     inchikey = models.CharField(max_length=27, null=True, unique=True)
     clean_inchikey = models.CharField(max_length=27, null=True)
     sequence = models.CharField(max_length=1000, null=True)
+    sequence_hash = models.TextField(null=True,default=None)
+    sequence_hash_col = models.TextField(null=True,blank=True,default=None)
+    sequence_dup = models.IntegerField(null=True,default=None)
+    sequence_hash_and_col_main = models.BooleanField(null=True,default=None)
+
 
     # Ligand properties
     mw = models.DecimalField(max_digits=15, decimal_places=3, null=True)
@@ -43,6 +48,9 @@ class Ligand(models.Model):
 
     class Meta():
         db_table = 'ligand'
+        indexes = [models.Index(name='sequence_hash_index', fields=['sequence_hash'])]
+        index_together = [['sequence_hash', 'sequence_hash_col'],]
+        unique_together = [['sequence_hash', 'sequence_hash_col','sequence_dup']]
 
 class CustomLigandMolManager(models.Manager):
     def truncate_table(self):
