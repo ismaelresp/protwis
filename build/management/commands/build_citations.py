@@ -240,16 +240,17 @@ class Command(ParseExcel):
 
         pub = self.create_publication(doi, wr, pubjournal,force=there_is_title,title=title,year=year,journal_name=journal)
 
-        #Add title and year if missing
-        edit = False
-        if there_is_title and not pub.title:
-            pub.title = title
-            edit = True
-        if year and not pub.year:
-            pub.year = year
-            edit = True
-        if edit:
-            pub.save()
+        if pub:
+            #Add title and year if missing
+            edit = False
+            if there_is_title and not pub.title:
+                pub.title = title
+                edit = True
+            if year and not pub.year:
+                pub.year = year
+                edit = True
+            if edit:
+                pub.save()
         return pub
 
     def add_hardcoded_references(self):
