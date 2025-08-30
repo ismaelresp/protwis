@@ -5,6 +5,9 @@ from django.http import JsonResponse
 from django.db.models import F, Q
 from django.views.generic import TemplateView
 
+
+from django.contrib.postgres.aggregates import ArrayAgg
+
 from protwis.context_processors import site_title
 from news.models import News
 from common.models import ReleaseNotes, ReleaseStatistics, Citation
@@ -15,6 +18,8 @@ from contactnetwork.models import InteractingResiduePair
 from signprot.models import SignprotComplex, SignprotStructure
 from googleapiclient.discovery import build
 from oauth2client.service_account import ServiceAccountCredentials
+
+from collections import OrderedDict
 
 
 # @cache_page(60 * 60 * 24)
@@ -101,27 +106,226 @@ def index(request):
 
 
 @cache_page(60 * 60 * 24 * 7)
-def citations_json(request):
-    citations_q = (
-        Citation.objects.all()
-        .values_list(
-            "url",
-            "video",
-            "docs",
-            "main",
-            "page_name",
-            "publication__title",
-            "publication__authors",
-            "publication__year",
-            "publication__reference",
-            "publication__journal__name",
-            "publication__web_link__index",
-        )
-        .order_by("-publication__year", "page_name")
-    )
-    response = JsonResponse(list(citations_q), safe=False)
+def citations_json(request, output_type='list'):
+    PUBLICATION_KEY = 'publication'
+
+    citation_fields = [
+        "url",
+        "video",
+        "docs",
+        "main",
+        "page_name",
+    ]
+    publication_fields = [
+        "title",
+        "authors",
+        "year",
+        "reference", 
+        "journal__name",
+        "web_link__index",
+    ]
+
+    publication_fields_aliases = {
+        "title": "title",
+        "authors": "authors",
+        "year": "year",
+        "reference": "reference",
+        "journal__name": "journal_name",
+        "web_link__index": "doi",
+    }
+
+    aliased_publication_fields = [publication_fields_aliases[f] for f in publication_fields]
+
+    all_fields = citation_fields + ['publication__' + f for f in publication_fields]
+
+    citations_q = Citation.objects.all().prefetch_related('publication')
+    citations_q = citations_q.values("id",'publication__id',*all_fields)
+    citations_q = citations_q.order_by("id")
+
+    # Agregate publications
+    citations_dict = OrderedDict()
+    for citation in citations_q:
+        citation_id = citation['id']
+        publication_id = citation['publication__id']
+        if citation_id not in citations_dict:
+            new_cit = {}
+            citations_dict[citation_id] = new_cit
+            for f in citation_fields:
+                new_cit[f] = citation[f]
+            pubs = {}
+            new_cit[PUBLICATION_KEY] = pubs
+        else:
+            new_cit = citations_dict[citation_id]
+            pubs = new_cit[PUBLICATION_KEY]
+        if publication_id is not None:
+            pubs[publication_id] = {publication_fields_aliases[f]: citation['publication__' + f] for f in publication_fields}
+
+    # get order of publications from citation_publication_through
+    citation_publication_through = Citation.publication.through
+    qcitpub = citation_publication_through.objects.all()
+    qcitpub = qcitpub.values_list('id', 'citation_id', 'publication_id')
+    qcitpub = qcitpub.order_by('id')
+
+    citation_pub_order_dict = {}
+    for id, citation_id, publication_id in qcitpub:
+        if citation_id not in citation_pub_order_dict:
+            citation_pub_order_dict[citation_id] = {'count':0,'index':{}}
+            c_citation_pub_order_dict = citation_pub_order_dict[citation_id]
+        c_citation_pub_order_dict['index'][publication_id] = c_citation_pub_order_dict['count']
+        c_citation_pub_order_dict['count'] += 1
+
+    for citation_id, citation in citations_dict.items():
+        if citation_id not in citation_pub_order_dict:
+            pubs = None
+        else:
+            c_citation_pub_order_dict = citation_pub_order_dict[citation_id]
+            pubs = [v 
+                    for k,v in sorted(citation[PUBLICATION_KEY].items(),
+                                    key=lambda x: c_citation_pub_order_dict['index'][x[0]])
+                ]
+        citation[PUBLICATION_KEY] = pubs
+
+    if output_type == 'dict' or output_type == 'object':
+        response = JsonResponse((list(citations_dict.values())), safe=False)
+    else:
+        citations_list = []
+        empty_pubs = [{f: None for f in aliased_publication_fields}]
+        for citation in citations_dict.values():
+            citation_l = []
+            for f in citation_fields:
+                v = citation[f]
+                if f == PUBLICATION_KEY:
+                    continue
+                citation_l.append(v)
+
+            pubs = citation[PUBLICATION_KEY]
+            if pubs is None:
+
+                pubs = empty_pubs
+            elif len(pubs) == 0:
+
+                pubs = empty_pubs
+                
+            for pub in pubs:
+                citation_pub_l = list(citation_l)
+                for f in aliased_publication_fields:
+                    citation_pub_l.append(pub[f])
+                citations_list.append(citation_pub_l)
+        response = JsonResponse((citations_list), safe=False)
+   
+    return response
+
+@cache_page(60 * 60 * 24 * 7)
+def citations_json_by_url(request, output_type='list'):
+    PUBLICATION_KEY = 'publication'
+
+    citation_fields = [
+        "url",
+        "video",
+        "docs",
+        "main",
+        "page_name",
+    ]
+    publication_fields = [
+        "title",
+        "authors",
+        "year",
+        "reference", 
+        "journal__name",
+        "web_link__index",
+    ]
+
+    publication_fields_aliases = {
+        "title": "title",
+        "authors": "authors",
+        "year": "year",
+        "reference": "reference",
+        "journal__name": "journal_name",
+        "web_link__index": "doi",
+    }
+
+    aliased_publication_fields = [publication_fields_aliases[f] for f in publication_fields]
+
+    all_fields = citation_fields + ['publication__' + f for f in publication_fields]
+
+    citations_q = Citation.objects.all().prefetch_related('publication')
+    citations_q = citations_q.values("id",'publication__id',*all_fields)
+    citations_q = citations_q.order_by("id")
+
+    # Agregate publications
+    citations_dict = OrderedDict()
+    for citation in citations_q:
+        citation_id = citation['id']
+        publication_id = citation['publication__id']
+        if citation_id not in citations_dict:
+            new_cit = {}
+            citations_dict[citation_id] = new_cit
+            for f in citation_fields:
+                new_cit[f] = citation[f]
+            pubs = {}
+            new_cit[PUBLICATION_KEY] = pubs
+        else:
+            new_cit = citations_dict[citation_id]
+            pubs = new_cit[PUBLICATION_KEY]
+        if publication_id is not None:
+            pubs[publication_id] = {publication_fields_aliases[f]: citation['publication__' + f] for f in publication_fields}
+
+    # get order of publications from citation_publication_through
+    citation_publication_through = Citation.publication.through
+    qcitpub = citation_publication_through.objects.all()
+    qcitpub = qcitpub.values_list('id', 'citation_id', 'publication_id')
+    qcitpub = qcitpub.order_by('id')
+
+    citation_pub_order_dict = {}
+    for id, citation_id, publication_id in qcitpub:
+        if citation_id not in citation_pub_order_dict:
+            citation_pub_order_dict[citation_id] = {'count':0,'index':{}}
+            c_citation_pub_order_dict = citation_pub_order_dict[citation_id]
+        c_citation_pub_order_dict['index'][publication_id] = c_citation_pub_order_dict['count']
+        c_citation_pub_order_dict['count'] += 1
+
+    for citation_id, citation in citations_dict.items():
+        if citation_id not in citation_pub_order_dict:
+            pubs = None
+        else:
+            c_citation_pub_order_dict = citation_pub_order_dict[citation_id]
+            pubs = [v 
+                    for k,v in sorted(citation[PUBLICATION_KEY].items(),
+                                    key=lambda x: c_citation_pub_order_dict['index'][x[0]])
+                ]
+        citation[PUBLICATION_KEY] = pubs
+
+    if output_type == 'dict' or output_type == 'object':
+        response = JsonResponse((list(citations_dict.values())), safe=False)
+    else:
+        citations_list = []
+        empty_pubs = [{f: None for f in aliased_publication_fields}]
+        for citation in citations_dict.values():
+            citation_l = []
+            for f in citation_fields:
+                v = citation[f]
+                if f == PUBLICATION_KEY:
+                    continue
+                citation_l.append(v)
+
+            pubs = citation[PUBLICATION_KEY]
+            if pubs is None:
+
+                pubs = empty_pubs
+            elif len(pubs) == 0:
+
+                pubs = empty_pubs
+                
+            for pub in pubs:
+                citation_pub_l = list(citation_l)
+                for f in aliased_publication_fields:
+                    citation_pub_l.append(pub[f])
+                citations_list.append(citation_pub_l)
+        response = JsonResponse((citations_list), safe=False)
+   
     return response
 
 def cite_us(request, site):
     context = {'site': site}
     return render(request, 'home/cite_us.html', context)
+ 

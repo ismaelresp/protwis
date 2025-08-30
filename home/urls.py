@@ -14,6 +14,6 @@ urlpatterns = [
     #         permanent=False),
     #     name="favicon"
     # ),
-    url(r'^citations', views.citations_json, name='citation'),
+    url(r'^citations/((?P<output_type>[-\w]+)/)?$', views.citations_json, name='citation'),
     url(r'^cite_us/(?P<site>[-\w]+)/$', views.cite_us, name='citation'),
 ]
