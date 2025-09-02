@@ -4,6 +4,7 @@ from django.views.decorators.cache import cache_page
 from django.http import JsonResponse
 from django.db.models import F, Q
 from django.views.generic import TemplateView
+from django.core.cache import cache
 
 
 from django.contrib.postgres.aggregates import ArrayAgg
@@ -20,6 +21,8 @@ from googleapiclient.discovery import build
 from oauth2client.service_account import ServiceAccountCredentials
 
 from collections import OrderedDict
+from urllib.parse import urlparse, parse_qs
+import os
 
 
 # @cache_page(60 * 60 * 24)
@@ -215,8 +218,10 @@ def citations_json(request, output_type='list'):
    
     return response
 
-@cache_page(60 * 60 * 24 * 7)
-def citations_json_by_url(request, output_type='list'):
+
+def citation_json_by_url(request, output_type='list'):
+    cache_flag = False
+
     PUBLICATION_KEY = 'publication'
 
     citation_fields = [
@@ -248,10 +253,110 @@ def citations_json_by_url(request, output_type='list'):
 
     all_fields = citation_fields + ['publication__' + f for f in publication_fields]
 
-    citations_q = Citation.objects.all().prefetch_related('publication')
-    citations_q = citations_q.values("id",'publication__id',*all_fields)
-    citations_q = citations_q.order_by("id")
+    
 
+ 
+
+    input_url = request.GET.get('url')
+
+    # Break into components
+    parsed_input_url  = urlparse(input_url)
+
+    # print("Scheme:", parsed_input_url.scheme)      # 'https'
+    # print("Netloc:", parsed_input_url.netloc)      # 'example.com:8080'
+    # print("Hostname:", parsed_input_url.hostname)  # 'example.com'
+    # print("Port:", parsed_input_url.port)          # 8080
+    # print("Path:", parsed_input_url.path)          # '/path/to/page'
+    # print("Params:", parsed_input_url.params)      # ''
+    # print("Query:", parsed_input_url.query)        # 'name=John&age=30'
+    # print("Fragment:", parsed_input_url.fragment)  # 'section2'
+
+    found_citation = False
+
+    parsed_input_url_path = parsed_input_url.path
+    print(parsed_input_url_path)
+
+    if parsed_input_url_path in {'/biased_signalling/bias_guidelines/',
+                                 '/biased_signalling/bias_guidelines',
+                                 '/biased_signalling/reference_selection',
+                                 '/biased_signalling/reference_selection/'}:
+        citations_q = []
+    else:
+        if parsed_input_url_path in {'/construct/analysis','/construct/analysis/'}:
+           parsed_input_url_path = '/construct/analysis'+'#'+parsed_input_url.fragment
+
+
+        if parsed_input_url.path.startswith('/biased_signalling/') or parsed_input_url.path == '/biased_signalling':
+            parsed_input_url_path = '/biased_signalling/'
+        elif parsed_input_url.path == '/drugs/targets_venn':
+            parsed_input_url_path = '/drugs/target_venn/'
+        cannon_url = 'https://'+parsed_input_url.hostname + parsed_input_url_path
+        cannon_url_star = 'https://'+parsed_input_url.hostname + os.path.join(parsed_input_url_path,'*')
+        if parsed_input_url_path in {'/', '','/*','*'}:
+            cannon_url_alt_slash = None
+        elif parsed_input_url_path.endswith('/'):
+            cannon_url_alt_slash = 'https://'+parsed_input_url.hostname + parsed_input_url_path[:-1]
+        else:
+            cannon_url_alt_slash = 'https://'+parsed_input_url.hostname + parsed_input_url_path + '/'
+        print(parsed_input_url_path,cannon_url,cannon_url_star,cannon_url_alt_slash)
+        for u in [cannon_url, cannon_url_star,cannon_url_alt_slash]:
+            if u is None:
+                continue
+            citations_q = Citation.objects.filter(url=u).prefetch_related('publication')
+            citations_q = citations_q.values("id",'publication__id',*all_fields)
+            citations_q = citations_q.order_by("id")
+            citations_q = list(citations_q)
+            if len(citations_q) > 0:
+                found_citation = True
+                break
+        print('hola',citations_q)
+        if not found_citation:
+            cache_flag = False
+            db_citation_dict_data = cache.get("db_citation_dict", None)
+            if db_citation_dict_data is None or not cache_flag:
+                print('hola2')
+                db_citation_dict_data = {}
+                citations_arrestindb_q = Citation.objects.filter(main__icontains='arrestin')
+                citations_bsa_q = Citation.objects.filter(main__icontains='bias')
+                citations_gproteindb_q = Citation.objects.filter(main__icontains='gprotein')
+                citations_grpcrdb_q = Citation.objects.filter(main__icontains='gpcr')
+
+                db_citation_q_list = [citations_arrestindb_q, citations_bsa_q, citations_gproteindb_q, citations_grpcrdb_q]
+                db_citation_q_list = [db_citation_q.values('id','url','main').order_by('id') for db_citation_q in db_citation_q_list]
+
+                db_citation_q_list = [list(db_citation_q) for db_citation_q in db_citation_q_list]
+                main_names = [db_citation_q[0]['main'] for db_citation_q in db_citation_q_list]
+                db_citation_dict_data['main_names'] = main_names
+                url_path_dict = {}
+                for db_citation_q in db_citation_q_list:
+                    for item in db_citation_q:
+                        parsed_item_url = urlparse(item['url'])
+                        if parsed_item_url.path in {'/', '','/*','*'}:
+                            continue
+                        v = (item['id'],item['main'])
+                        parsed_item_url_path = parsed_item_url.path
+                        if parsed_item_url_path in {'/construct/analysis','/construct/analysis/'}:
+                            parsed_item_url_path = '/construct/analysis'+'#'+parsed_item_url.fragment
+                        url_path_dict[parsed_item_url_path] = v
+ 
+                        if parsed_item_url_path.endswith('*'):
+                            url_path_dict[parsed_item_url_path[:-1]] = v
+                        elif parsed_item_url_path.endswith('/'):
+                            url_path_dict[parsed_item_url_path[:-1]] = v
+                        else:
+                            url_path_dict[parsed_item_url_path + '/'] = v
+                db_citation_dict_data['url_path_dict'] = url_path_dict
+                cache.set("db_citation_dict", db_citation_dict_data, timeout=60 * 60 * 24 * 7)
+            url_path_dict = db_citation_dict_data['url_path_dict']
+            citation_id,main = url_path_dict.get(parsed_input_url_path, (None,None))
+            if citation_id is not None:
+                citations_q = Citation.objects.filter(id=citation_id).prefetch_related('publication')
+                citations_q = citations_q.values("id",'publication__id',*all_fields)
+                citations_q = citations_q.order_by("id")
+                citations_q = list(citations_q)
+            else:
+                citations_q = []
+    
     # Agregate publications
     citations_dict = OrderedDict()
     for citation in citations_q:
@@ -295,8 +400,11 @@ def citations_json_by_url(request, output_type='list'):
                 ]
         citation[PUBLICATION_KEY] = pubs
 
+
+    
+
     if output_type == 'dict' or output_type == 'object':
-        response = JsonResponse((list(citations_dict.values())), safe=False)
+        response = JsonResponse((list(citations_dict.values()),main), safe=False)
     else:
         citations_list = []
         empty_pubs = [{f: None for f in aliased_publication_fields}]
@@ -321,7 +429,7 @@ def citations_json_by_url(request, output_type='list'):
                 for f in aliased_publication_fields:
                     citation_pub_l.append(pub[f])
                 citations_list.append(citation_pub_l)
-        response = JsonResponse((citations_list), safe=False)
+        response = JsonResponse((citations_list,main), safe=False)
    
     return response
 

@@ -126,12 +126,39 @@
           location.href = this.href;
         });
 
-        showAlert('<strong>Cite us!</strong> If you use this tool, please cite\
-         <a class="link-underline-primary" href="https://doi.org/10.1093/nar/gkae1065"\
-          target="_blank" rel="noopener noreferrer"><u>our year 2025 article in \
-            <i>Nucleic Acid Research</i></u></a> and <a class="link-underline-primary"\
-             href="https://www.example.com" target="_blank" rel="noopener noreferrer"><u><i>the\
-                 current tool article.</i></u></a>','info',timeout=false);
+        $.get('/citation_by_url/object/',{ url: window.location.href }, function(data) {
+            console.log('hello');
+            console.log(data);
+            publication_html = '';
+            main = data[1];
+            if (data[0].length > 0) {
+            $.each(data[0][0]['publication'], function(index, value) {
+                publication_html += '<li>' + value['title'] +'.<br\>'+value['authors']+'.<br\><a href="https://doi.org/'+value['doi']+'" target="_blank">'+'<i>'+value['journal_name']+'</i>, '+value['year'] + '</a></li>';
+                console.log(index, value);
+            });
+            console.log('hello2');
+            console.log(publication_html);
+            showAlert(
+                '<strong>Cite us!</strong> If you use this tool, please cite ' +
+                '<a class="link-underline-primary" href="https://doi.org/10.1093/nar/gkae1065" ' +
+                'target="_blank" rel="noopener noreferrer"><u>our year 2025 article in ' +
+                '<i>Nucleic Acid Research</i></u></a> and <a class="link-underline-primary" ' +
+                'href="https://www.example.com" target="_blank" rel="noopener noreferrer">' +
+                '<u><i>the current tool article.</i></u></a><br>' +
+                'Tool citations:<br>' +
+                '<ul>' +
+                publication_html +
+                '</ul><br>'+
+                'This page belongs to: '+main,
+                'info',
+                timeout = false
+            );
+            } else {
+                console.log('No publication data found');
+            }
+        });
+
+
 
         // Assigning colors to .refLink elements based on matching first member of the 'keys' value of .refLink button element
         var colordict = new Array;
