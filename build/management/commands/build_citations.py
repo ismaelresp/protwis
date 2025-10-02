@@ -206,7 +206,7 @@ class Command(ParseExcel):
                 pub = Publication.get_or_create_from_doi(doi)
 
             if not pub.journal:
-                if journal_name:
+                if journal_name or title:
                     pubjournal, created_pj = PublicationJournal.objects.get_or_create(defaults={"name": journal_name, 'slug': slugify(journal_name)}, name__iexact=journal_name)
                     pub.journal = pubjournal
                     pub.save()
@@ -214,7 +214,7 @@ class Command(ParseExcel):
             self.logger.info('Created Publication:'+str(pub))
             return pub
         elif force:
-            if journal_name:
+            if journal_name or title:
                 pubjournal, created_pj = PublicationJournal.objects.get_or_create(defaults={"name": journal_name, 'slug': slugify(journal_name)}, name__iexact=journal_name)
                 pub, create = Publication.objects.get_or_create(journal=pubjournal,title=title,year=year)
                 self.logger.info('Created Publication:'+str(pub))
