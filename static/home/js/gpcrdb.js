@@ -281,3 +281,24 @@ function getReference(keys, callback) {
     }
   });
 }
+
+function removeQuery(url) {
+    if (typeof URL === "function") {
+        // Modern browsers
+        try {
+            let urlObj = new URL(url, window.location.origin); // base fallback for relative URLs
+            urlObj.search = ""; // strip query
+            return urlObj.toString();
+        } catch (e) {
+            // In case URL parsing fails, fallback
+        }
+    }
+    // Fallback for old browsers
+    var parts = url.split("?");
+    var noQuery = parts[0];
+    if (url.indexOf("#") !== -1) {
+        var hash = url.split("#")[1];
+        noQuery += "#" + hash;
+    }
+    return noQuery;
+}
