@@ -284,7 +284,6 @@ def citation_json_by_url(request, output_type='list'):
     ONLY_DEFAULT_CITATION_DOMAINS_TAGS = {'gproteindb.org':'gprotein',
                                           'arrestindb.org':'arrestin',
                                           'biasedsignalingatlas.org':'bias'}
-    
 
     citation_fields = [
         "url",
