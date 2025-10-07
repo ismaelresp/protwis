@@ -335,13 +335,11 @@ def citation_json_by_url(request, output_type='list'):
         elif not settings.DEBUG:
             hostname = parsed_input_url.hostname
         if hostname is not None and hostname in ONLY_DEFAULT_CITATION_DOMAINS_TAGS:
-            
             citations_q = []
             only_default_citation = True
             db_citation_dict_data = {}
             if cache_flag:
                 db_citation_dict_data = cache.get("db_main_citation_dict", {})
-            
             if hostname not in db_citation_dict_data:
                 dcit_q = DefaultCitation.objects.get(main__icontains=ONLY_DEFAULT_CITATION_DOMAINS_TAGS[hostname])
                 main = dcit_q.main
@@ -353,7 +351,6 @@ def citation_json_by_url(request, output_type='list'):
 
             if parsed_input_url_path in {'/construct/analysis','/construct/analysis/'}:
                 parsed_input_url_path = '/construct/analysis'+'#'+parsed_input_url.fragment
-
 
             if parsed_input_url.path.startswith('/biased_signalling/') or parsed_input_url.path == '/biased_signalling':
                 parsed_input_url_path = '/biased_signalling/'
@@ -457,7 +454,7 @@ def citation_json_by_url(request, output_type='list'):
         for cit in citations_dict.values():
             main = cit['main']
             break
-    
+
     if not only_default_citation:
         for db in ONLY_DEFAULT_CITATION_DBS:
             if main is not None:
@@ -472,7 +469,7 @@ def citation_json_by_url(request, output_type='list'):
     qcitpub = qcitpub.order_by('id')
 
     _sort_in_place_aggregated_publications_citations_dict_publications(citations_dict, qcitpub)
-    
+
     if not no_citation:
         default_citation = get_default_citation(main,output_type=output_type)
 
@@ -488,7 +485,7 @@ def citation_json_by_url(request, output_type='list'):
                                      aliased_publication_fields, citation_fields, PUBLICATION_KEY)
         response = JsonResponse((citations_list,main,only_default_citation,
                                     no_citation,default_citation), safe=False)
-   
+
     return response
 
 def cite_us(request, site):
