@@ -236,7 +236,6 @@ def citations_json(request, output_type='list'):
         citations_list = _aggregated_publications_citations_dict_to_list(citations_dict,
                                              aliased_publication_fields, citation_fields, PUBLICATION_KEY)
         response = JsonResponse((citations_list), safe=False)
-   
     return response
 
 def escape_but_none(value):
@@ -331,7 +330,7 @@ def citation_json_by_url(request, output_type='list'):
         no_citation = True
         citations_q = []
     else:
-        hostname = None              
+        hostname = None
         if replace_hostname and settings.DEBUG:
             hostname = parsed_input_url_hostname
         elif not settings.DEBUG:
