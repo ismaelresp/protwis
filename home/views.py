@@ -402,7 +402,7 @@ def citation_json_by_url(request, output_type='list'):
                             if parsed_item_url_path in {'/construct/analysis','/construct/analysis/'}:
                                 parsed_item_url_path = '/construct/analysis'+'#'+parsed_item_url.fragment
                             url_path_dict[parsed_item_url_path] = v
-    
+
                             if parsed_item_url_path.endswith('*'):
                                 url_path_dict[parsed_item_url_path[:-1]] = v
                             elif parsed_item_url_path.endswith('/'):
@@ -491,4 +491,3 @@ def citation_json_by_url(request, output_type='list'):
 def cite_us(request, site):
     context = {'site': site}
     return render(request, 'home/cite_us.html', context)
- 
