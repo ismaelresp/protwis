@@ -174,7 +174,7 @@ canvas {
         <h4 style="color: black;">LIGAND</h4>
     </div>
     <div class="col-md-6">
-        <a href="/ligand/{{ ligand_object.ligand.id }}/info">{{ ligand_object.ligand.name | capfirst | safe}}</a>{% if is_ligand_physiological %} (Physiological){% endif %}
+        <a href="/ligand/{{ ligand_object.ligand.id }}/info">{{ ligand_object.ligand.name | capfirst | safe}}</a>{% if is_ligand_physiological %} (Natural){% else %} (Man-made){% endif %}
     </div>
 </div>
 
@@ -241,10 +241,16 @@ Confidence assessment of the relative positioning of protein chains at the inter
         <div id="iPTM_location"></div>
         <div>
           <h5>PAE mean: <b>{{ scores.pae_mean|floatformat:1 }}</b>
-            <span class="fa fa-info-circle simple-popover" data-html="true" data-toggle="popover" data-trigger="hover" data-placement="bottom" data-content="<b>The mean of the predicted alignment errors</b><br>Confidence assessment of the relative position of the ligand and receptor."></span>
+            <span class="fa fa-info-circle simple-popover" data-html="true" data-toggle="popover" data-trigger="hover" data-placement="bottom" data-content="<b>The mean of the Predicted Alignment Errors (PAE)</b><br>Confidence assessment of the relative position of the ligand and receptor."></span>
           </h5>
         </div>
         <div id="PAE_location"></div>
+        <div>
+          {% if  scores.pae_mean > 10 %}<p><span style="color: red;">This model might not be suitable for some applications.</span>
+          <span class="fa fa-info-circle simple-popover" data-html="true" data-toggle="popover" data-trigger="hover" data-placement="bottom" data-content="PAE mean is higher than 10 &#x00C5;. This model might need to be further validated using other <i>in silico</i> methods."></span>
+          </p>
+          {% endif %}
+        </div>
     </div>
     {% else %}
               <h5>7TM PAE mean: <b>{{ scores.pae_7tm|floatformat:1 }}</b>
